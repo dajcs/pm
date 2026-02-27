@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { ChatSidebar } from "@/components/ChatSidebar";
 import { LoginPage } from "@/components/LoginPage";
 import { setAuthErrorHandler } from "@/lib/api";
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
+  const [boardKey, setBoardKey] = useState(0);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
@@ -41,9 +43,22 @@ export default function Home() {
     setToken(jwt);
   }, []);
 
+  const handleBoardUpdated = useCallback(() => {
+    setBoardKey((k) => k + 1);
+  }, []);
+
   if (checking) return null;
 
   if (!token) return <LoginPage onLogin={handleLogin} />;
 
-  return <KanbanBoard onLogout={handleLogout} />;
+  return (
+    <div className="flex min-h-screen">
+      <div className="flex-1 overflow-auto">
+        <KanbanBoard key={boardKey} onLogout={handleLogout} />
+      </div>
+      <div className="sticky top-0 h-screen p-4 pl-0">
+        <ChatSidebar onBoardUpdated={handleBoardUpdated} />
+      </div>
+    </div>
+  );
 }

@@ -106,12 +106,12 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 
 ## Part 10: AI Chat Sidebar
 
-- [ ] Create ChatSidebar.tsx (always visible, scrollable messages, input)
-- [ ] Create ChatMessage.tsx (message bubble with edit/delete for user messages)
-- [ ] Update layout: board + sidebar side by side
-- [ ] Chat state: useState for messages array (ephemeral)
-- [ ] Edit message: clear subsequent, re-send to AI
-- [ ] Delete message: remove it and all subsequent
-- [ ] Auto-refetch board on board_update from AI
-- [ ] Unit tests: send, edit, delete messages
+- [x] Create ChatSidebar.tsx (always visible, scrollable messages, input)
+- [x] Create ChatMessage.tsx (message bubble with edit/delete for user messages)
+- [x] Update layout: board + sidebar side by side
+- [x] Chat state: useState for messages array (ephemeral)
+- [x] Edit message: clear subsequent, re-send to AI
+- [x] Delete message: remove it and all subsequent
+- [x] Auto-refetch board on board_update from AI
+- [x] Unit tests: send, edit, delete messages (7 tests)
 - [ ] E2E tests: chat flow, AI board mutation

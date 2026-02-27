@@ -88,3 +88,18 @@ export async function saveColumnsOrder(data: BoardData): Promise<BoardData> {
     body: JSON.stringify(data),
   });
 }
+
+export interface ChatResponse {
+  message: string;
+  board_update: BoardData | null;
+}
+
+export async function sendChatMessage(
+  message: string,
+  history: { role: string; content: string }[]
+): Promise<ChatResponse> {
+  return request<ChatResponse>("/api/ai/chat", {
+    method: "POST",
+    body: JSON.stringify({ message, history }),
+  });
+}

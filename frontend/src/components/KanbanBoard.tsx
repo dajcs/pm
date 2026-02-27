@@ -205,6 +205,7 @@ export const KanbanBoard = ({ onLogout, initialBoard }: KanbanBoardProps) => {
               <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
                 Kanban Studio
               </h1>
+              <div className="mt-2 h-1 w-16 rounded-full bg-[var(--accent-yellow)]" />
               <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
                 Keep momentum visible. Rename columns, drag cards between stages,
                 and capture quick notes without getting buried in settings.
@@ -235,7 +236,7 @@ export const KanbanBoard = ({ onLogout, initialBoard }: KanbanBoardProps) => {
                 key={column.id}
                 className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
               >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent-yellow)]" />
                 {column.title}
               </div>
             ))}

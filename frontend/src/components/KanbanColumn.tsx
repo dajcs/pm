@@ -36,15 +36,15 @@ export const KanbanColumn = ({
       <div className="flex items-start justify-between gap-3">
         <div className="w-full">
           <div className="flex items-center gap-3">
-            <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+            <div className="h-1.5 w-12 rounded-full bg-[var(--secondary-purple)]" />
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]">
               {cards.length} cards
             </span>
           </div>
           <input
             value={column.title}
             onChange={(event) => onRename(column.id, event.target.value)}
-            className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
+            className="mt-3 w-full bg-transparent font-display text-xl font-bold text-[var(--navy-dark)] outline-none"
             aria-label="Column title"
           />
         </div>

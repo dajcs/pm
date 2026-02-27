@@ -126,6 +126,7 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
         <p className="mt-1 text-sm font-semibold text-[var(--navy-dark)]">
           Chat
         </p>
+        <div className="mt-2 h-0.5 w-8 rounded-full bg-[var(--accent-yellow)]" />
       </div>
 
       {/* Messages */}

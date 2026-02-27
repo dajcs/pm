@@ -54,6 +54,7 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
           <h1 className="mt-3 font-display text-3xl font-semibold text-[var(--navy-dark)]">
             Kanban Studio
           </h1>
+          <div className="mt-2 h-1 w-12 rounded-full bg-[var(--accent-yellow)]" />
         </div>
 
         <label className="flex flex-col gap-1.5">

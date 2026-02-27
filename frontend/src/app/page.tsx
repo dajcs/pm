@@ -3,10 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { LoginPage } from "@/components/LoginPage";
+import { setAuthErrorHandler } from "@/lib/api";
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem("token");
+    setToken(null);
+  }, []);
+
+  // Register the global auth error handler
+  useEffect(() => {
+    setAuthErrorHandler(handleLogout);
+  }, [handleLogout]);
 
   useEffect(() => {
     const stored = localStorage.getItem("token");
@@ -28,11 +39,6 @@ export default function Home() {
   const handleLogin = useCallback((jwt: string) => {
     localStorage.setItem("token", jwt);
     setToken(jwt);
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    localStorage.removeItem("token");
-    setToken(null);
   }, []);
 
   if (checking) return null;

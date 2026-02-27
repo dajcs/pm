@@ -1,17 +1,38 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { initialData } from "@/lib/kanban";
+import * as api from "@/lib/api";
+
+vi.mock("@/lib/api", () => ({
+  fetchBoard: vi.fn(),
+  saveBoard: vi.fn(),
+  createCard: vi.fn(),
+  deleteCard: vi.fn(),
+  updateCard: vi.fn(),
+  renameColumn: vi.fn(),
+  saveColumnsOrder: vi.fn(),
+  setAuthErrorHandler: vi.fn(),
+}));
+
+const renderBoard = () =>
+  render(<KanbanBoard initialBoard={initialData} />);
 
 const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 
+beforeEach(() => {
+  vi.mocked(api.renameColumn).mockResolvedValue(undefined);
+  vi.mocked(api.saveColumnsOrder).mockResolvedValue(initialData);
+});
+
 describe("KanbanBoard", () => {
   it("renders five columns", () => {
-    render(<KanbanBoard />);
+    renderBoard();
     expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
   });
 
   it("renames a column", async () => {
-    render(<KanbanBoard />);
+    renderBoard();
     const column = getFirstColumn();
     const input = within(column).getByLabelText("Column title");
     await userEvent.clear(input);
@@ -20,7 +41,14 @@ describe("KanbanBoard", () => {
   });
 
   it("adds and removes a card", async () => {
-    render(<KanbanBoard />);
+    vi.mocked(api.createCard).mockResolvedValueOnce({
+      id: "card-new",
+      title: "New card",
+      details: "Notes",
+    });
+    vi.mocked(api.deleteCard).mockResolvedValueOnce(undefined);
+
+    renderBoard();
     const column = getFirstColumn();
     const addButton = within(column).getByRole("button", {
       name: /add a card/i,
@@ -34,7 +62,9 @@ describe("KanbanBoard", () => {
 
     await userEvent.click(within(column).getByRole("button", { name: /add card/i }));
 
-    expect(within(column).getByText("New card")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(column).getByText("New card")).toBeInTheDocument()
+    );
 
     const deleteButton = within(column).getByRole("button", {
       name: /delete new card/i,
@@ -45,7 +75,9 @@ describe("KanbanBoard", () => {
   });
 
   it("edits a card title inline", async () => {
-    render(<KanbanBoard />);
+    vi.mocked(api.updateCard).mockResolvedValueOnce(undefined);
+
+    renderBoard();
     const column = getFirstColumn();
     const title = within(column).getByText("Align roadmap themes");
     await userEvent.click(title);
@@ -59,7 +91,9 @@ describe("KanbanBoard", () => {
   });
 
   it("edits card details inline", async () => {
-    render(<KanbanBoard />);
+    vi.mocked(api.updateCard).mockResolvedValueOnce(undefined);
+
+    renderBoard();
     const column = getFirstColumn();
     const details = within(column).getByText(
       "Draft quarterly themes with impact statements and metrics."
@@ -73,5 +107,11 @@ describe("KanbanBoard", () => {
     await userEvent.tab();
 
     expect(within(column).getByText("New details")).toBeInTheDocument();
+  });
+
+  it("shows loading state when no initialBoard", () => {
+    vi.mocked(api.fetchBoard).mockReturnValue(new Promise(() => {})); // never resolves
+    render(<KanbanBoard />);
+    expect(screen.getByText("Loading board...")).toBeInTheDocument();
   });
 });

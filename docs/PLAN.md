@@ -73,14 +73,14 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 
 ## Part 7: Frontend + Backend Integration
 
-- [ ] Create frontend/src/lib/api.ts (API client with JWT headers)
-- [ ] Update KanbanBoard to fetch from API on mount
-- [ ] Add loading state
-- [ ] Wire all mutations to API (optimistic updates)
-- [ ] Remove initialData from production code
-- [ ] Handle API errors
-- [ ] Frontend unit tests with mocked API
-- [ ] E2E tests: persistence across refresh, drag-drop persists, inline edit persists
+- [x] Create frontend/src/lib/api.ts (API client with JWT headers)
+- [x] Update KanbanBoard to fetch from API on mount
+- [x] Add loading state
+- [x] Wire all mutations to API (optimistic updates)
+- [x] Remove initialData from production code
+- [x] Handle API errors (toast + 401 auto-logout)
+- [x] Frontend unit tests with mocked API
+- [x] E2E tests: persistence across refresh, drag-drop persists, inline edit persists
 
 ---
 

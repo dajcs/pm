@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -13,15 +13,47 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { moveCard, type BoardData } from "@/lib/kanban";
+import * as api from "@/lib/api";
 
 interface KanbanBoardProps {
   onLogout?: () => void;
+  /** Supply initial board data (used in tests to skip API fetch). */
+  initialBoard?: BoardData;
 }
 
-export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
-  const [board, setBoard] = useState<BoardData>(() => initialData);
+export const KanbanBoard = ({ onLogout, initialBoard }: KanbanBoardProps) => {
+  const [board, setBoard] = useState<BoardData | null>(initialBoard ?? null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!initialBoard);
+  const [error, setError] = useState<string | null>(null);
+  const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const showError = useCallback((msg: string) => {
+    setError(msg);
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    errorTimer.current = setTimeout(() => setError(null), 4000);
+  }, []);
+
+  // Fetch board on mount (skip if initialBoard provided)
+  useEffect(() => {
+    if (initialBoard) return;
+    let cancelled = false;
+    api
+      .fetchBoard()
+      .then((data) => {
+        if (!cancelled) setBoard(data);
+      })
+      .catch((err) => {
+        if (!cancelled) showError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialBoard, showError]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -29,7 +61,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     })
   );
 
-  const cardsById = useMemo(() => board.cards, [board.cards]);
+  const cardsById = useMemo(() => board?.cards ?? {}, [board?.cards]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -39,71 +71,124 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     const { active, over } = event;
     setActiveCardId(null);
 
-    if (!over || active.id === over.id) {
-      return;
-    }
+    if (!over || active.id === over.id || !board) return;
 
-    setBoard((prev) => ({
-      ...prev,
-      columns: moveCard(prev.columns, active.id as string, over.id as string),
-    }));
+    const newColumns = moveCard(
+      board.columns,
+      active.id as string,
+      over.id as string
+    );
+    const updated = { ...board, columns: newColumns };
+    setBoard(updated);
+
+    api.saveColumnsOrder(updated).catch((err) => {
+      setBoard(board);
+      showError(err.message);
+    });
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
-    setBoard((prev) => ({
-      ...prev,
-      columns: prev.columns.map((column) =>
-        column.id === columnId ? { ...column, title } : column
+    if (!board) return;
+    const prev = board;
+    setBoard({
+      ...board,
+      columns: board.columns.map((col) =>
+        col.id === columnId ? { ...col, title } : col
       ),
-    }));
+    });
+
+    api.renameColumn(columnId, title).catch((err) => {
+      setBoard(prev);
+      showError(err.message);
+    });
   };
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
-    const id = createId("card");
-    setBoard((prev) => ({
-      ...prev,
-      cards: {
-        ...prev.cards,
-        [id]: { id, title, details: details || "No details yet." },
-      },
-      columns: prev.columns.map((column) =>
-        column.id === columnId
-          ? { ...column, cardIds: [...column.cardIds, id] }
-          : column
-      ),
-    }));
+    if (!board) return;
+    const cardDetails = details || "No details yet.";
+
+    api
+      .createCard(columnId, title, cardDetails)
+      .then((card) => {
+        setBoard((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            cards: {
+              ...prev.cards,
+              [card.id]: { id: card.id, title: card.title, details: card.details },
+            },
+            columns: prev.columns.map((col) =>
+              col.id === columnId
+                ? { ...col, cardIds: [...col.cardIds, card.id] }
+                : col
+            ),
+          };
+        });
+      })
+      .catch((err) => showError(err.message));
   };
 
   const handleDeleteCard = (columnId: string, cardId: string) => {
-    setBoard((prev) => {
-      return {
-        ...prev,
-        cards: Object.fromEntries(
-          Object.entries(prev.cards).filter(([id]) => id !== cardId)
-        ),
-        columns: prev.columns.map((column) =>
-          column.id === columnId
-            ? {
-                ...column,
-                cardIds: column.cardIds.filter((id) => id !== cardId),
-              }
-            : column
-        ),
-      };
+    if (!board) return;
+    const prev = board;
+
+    setBoard({
+      ...board,
+      cards: Object.fromEntries(
+        Object.entries(board.cards).filter(([id]) => id !== cardId)
+      ),
+      columns: board.columns.map((col) =>
+        col.id === columnId
+          ? { ...col, cardIds: col.cardIds.filter((id) => id !== cardId) }
+          : col
+      ),
+    });
+
+    api.deleteCard(cardId).catch((err) => {
+      setBoard(prev);
+      showError(err.message);
     });
   };
 
   const handleEditCard = (cardId: string, title: string, details: string) => {
-    setBoard((prev) => ({
-      ...prev,
+    if (!board) return;
+    const prev = board;
+    setBoard({
+      ...board,
       cards: {
-        ...prev.cards,
-        [cardId]: { ...prev.cards[cardId], title, details },
+        ...board.cards,
+        [cardId]: { ...board.cards[cardId], title, details },
       },
-    }));
+    });
+
+    api.updateCard(cardId, { title, details }).catch((err) => {
+      setBoard(prev);
+      showError(err.message);
+    });
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
+          Loading board...
+        </p>
+      </div>
+    );
+  }
+
+  if (!board) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-sm font-semibold text-red-600">
+          Failed to load board.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative overflow-hidden">
@@ -184,6 +269,15 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
             ) : null}
           </DragOverlay>
         </DndContext>
+
+        {error && (
+          <div
+            role="alert"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-medium text-red-700 shadow-lg"
+          >
+            {error}
+          </div>
+        )}
       </main>
     </div>
   );

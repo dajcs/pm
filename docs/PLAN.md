@@ -47,16 +47,16 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 - [x] Add get_current_user dependency for protected routes
 - [x] Backend tests: login success/failure, token validation
 - [x] Frontend tests: LoginPage form, auth flow
-- [ ] E2E test: login, see board, logout
+- [x] E2E test: login, see board, logout
 
 ---
 
 ## Part 5: Database Schema
 
-- [ ] Create docs/database.md documenting schema
-- [ ] Create docs/schema.json with schema definition
-- [ ] Tables: users, boards, columns, cards
-- [ ] User reviews and approves schema
+- [x] Create docs/database.md documenting schema
+- [x] Create docs/schema.json with schema definition
+- [x] Tables: users, boards, columns, cards
+- [x] User reviews and approves schema
 
 ---
 

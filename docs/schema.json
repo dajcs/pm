@@ -1,0 +1,53 @@
+{
+  "database": "sqlite",
+  "file": "kanban.db",
+  "tables": {
+    "users": {
+      "columns": {
+        "id": { "type": "INTEGER", "primaryKey": true },
+        "username": { "type": "TEXT", "unique": true, "nullable": false },
+        "password_hash": { "type": "TEXT", "nullable": false }
+      }
+    },
+    "boards": {
+      "columns": {
+        "id": { "type": "INTEGER", "primaryKey": true },
+        "user_id": { "type": "INTEGER", "nullable": false, "foreignKey": { "table": "users", "column": "id", "onDelete": "CASCADE" } },
+        "name": { "type": "TEXT", "nullable": false },
+        "created_at": { "type": "TEXT", "nullable": false, "description": "ISO 8601 timestamp" }
+      }
+    },
+    "columns": {
+      "columns": {
+        "id": { "type": "TEXT", "primaryKey": true, "description": "e.g. col-backlog" },
+        "board_id": { "type": "INTEGER", "nullable": false, "foreignKey": { "table": "boards", "column": "id", "onDelete": "CASCADE" } },
+        "title": { "type": "TEXT", "nullable": false },
+        "position": { "type": "INTEGER", "nullable": false }
+      }
+    },
+    "cards": {
+      "columns": {
+        "id": { "type": "TEXT", "primaryKey": true, "description": "e.g. card-abc" },
+        "column_id": { "type": "TEXT", "nullable": false, "foreignKey": { "table": "columns", "column": "id", "onDelete": "CASCADE" } },
+        "title": { "type": "TEXT", "nullable": false },
+        "details": { "type": "TEXT", "nullable": false, "default": "No details yet." },
+        "position": { "type": "INTEGER", "nullable": false }
+      }
+    }
+  },
+  "seed": {
+    "users": [
+      { "username": "user", "password_hash": "<hashed 'password'>" }
+    ],
+    "defaultBoard": {
+      "name": "My Board",
+      "columns": [
+        { "id": "col-backlog", "title": "Backlog", "position": 0 },
+        { "id": "col-todo", "title": "To Do", "position": 1 },
+        { "id": "col-discovery", "title": "Discovery", "position": 2 },
+        { "id": "col-progress", "title": "In Progress", "position": 3 },
+        { "id": "col-done", "title": "Done", "position": 4 }
+      ]
+    }
+  }
+}

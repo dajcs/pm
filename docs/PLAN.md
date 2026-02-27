@@ -26,13 +26,13 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 
 ## Part 3: Serve the Frontend
 
-- [ ] Set output: 'export' in next.config.ts
-- [ ] Update Dockerfile to build frontend and copy static output
-- [ ] Update backend to serve Next.js export at /
-- [ ] Add inline card editing to KanbanCard.tsx
-- [ ] Add handleEditCard to KanbanBoard.tsx
-- [ ] Add unit tests for inline editing
-- [ ] Verify: board at localhost:8000, all unit tests pass, cards editable inline
+- [x] Set output: 'export' in next.config.ts
+- [x] Update Dockerfile to build frontend and copy static output
+- [x] Update backend to serve Next.js export at /
+- [x] Add inline card editing to KanbanCard.tsx
+- [x] Add handleEditCard to KanbanBoard.tsx
+- [x] Add unit tests for inline editing
+- [x] Verify: board at localhost:8000, all unit tests pass, cards editable inline
 
 ---
 

@@ -62,12 +62,12 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 
 ## Part 6: Backend API
 
-- [ ] Create backend/database.py with init_db() (creates tables, seeds user)
-- [ ] Create backend/models.py (Pydantic models)
-- [ ] Add routes: GET /api/board, PUT /api/board, POST/DELETE/PATCH cards, PATCH columns, PUT columns/order
-- [ ] Call init_db() on app startup
-- [ ] All endpoints require JWT auth
-- [ ] Pytest tests: init_db, auth, CRUD, default board creation
+- [x] Create backend/database.py with init_db() (creates tables, seeds user)
+- [x] Create backend/models.py (Pydantic models)
+- [x] Add routes: GET /api/board, PUT /api/board, POST/DELETE/PATCH cards, PATCH columns, PUT columns/order
+- [x] Call init_db() on app startup
+- [x] All endpoints require JWT auth
+- [x] Pytest tests: init_db, auth, CRUD, default board creation
 
 ---
 

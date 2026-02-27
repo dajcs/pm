@@ -6,6 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from ai import chat as ai_chat
 from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
 from database import (
     create_card,
@@ -196,6 +197,15 @@ async def patch_column(
 async def put_columns_order(data: BoardData, board_id: int = Depends(get_board_id)):
     await save_board(board_id, data.model_dump())
     return await load_board(board_id)
+
+
+# --- AI ---
+
+
+@app.post("/api/ai/test")
+async def ai_test(_: str = Depends(get_current_user)):
+    reply = await ai_chat([{"role": "user", "content": "What is 2+2?"}])
+    return {"reply": reply}
 
 
 # --- Static files (must be last) ---

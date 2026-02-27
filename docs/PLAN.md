@@ -86,11 +86,11 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 
 ## Part 8: AI Connectivity
 
-- [ ] Create backend/ai.py (OpenRouter wrapper via openai client)
-- [ ] Add POST /api/ai/test endpoint (2+2 test)
-- [ ] Load .env for API key
-- [ ] Unit test with mocked API
-- [ ] Verify: /api/ai/test returns response containing "4"
+- [x] Create backend/ai.py (OpenRouter wrapper via openai client)
+- [x] Add POST /api/ai/test endpoint (2+2 test)
+- [x] Load .env for API key
+- [x] Unit test with mocked API
+- [x] Verify: /api/ai/test returns response containing "4"
 
 ---
 

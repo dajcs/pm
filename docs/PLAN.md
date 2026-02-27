@@ -38,15 +38,15 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 
 ## Part 4: Fake Sign-in
 
-- [ ] Add /api/auth/login POST endpoint (hardcoded user/password, returns JWT)
-- [ ] Add /api/auth/me GET endpoint (validates JWT)
-- [ ] Create backend/auth.py (create_token, verify_token)
-- [ ] Create LoginPage frontend component
-- [ ] Update page.tsx for auth flow (check token, show login or board)
-- [ ] Add logout button to board header
-- [ ] Add get_current_user dependency for protected routes
-- [ ] Backend tests: login success/failure, token validation
-- [ ] Frontend tests: LoginPage form, auth flow
+- [x] Add /api/auth/login POST endpoint (hardcoded user/password, returns JWT)
+- [x] Add /api/auth/me GET endpoint (validates JWT)
+- [x] Create backend/auth.py (create_token, verify_token)
+- [x] Create LoginPage frontend component
+- [x] Update page.tsx for auth flow (check token, show login or board)
+- [x] Add logout button to board header
+- [x] Add get_current_user dependency for protected routes
+- [x] Backend tests: login success/failure, token validation
+- [x] Frontend tests: LoginPage form, auth flow
 - [ ] E2E test: login, see board, logout
 
 ---

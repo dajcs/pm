@@ -14,13 +14,13 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 
 ## Part 2: Scaffolding (Docker + FastAPI + Scripts)
 
-- [ ] Create backend pyproject.toml with dependencies (fastapi, uvicorn, python-jose, aiosqlite, openai)
-- [ ] Create backend/main.py with /api/health endpoint + static file serving
-- [ ] Create Dockerfile (Python base, uv, build frontend, serve static)
-- [ ] Create docker-compose.yml (port 8000, mount .env)
-- [ ] Create scripts: start.sh, stop.sh, start.ps1, stop.ps1
-- [ ] Create temporary static/index.html for hello world test
-- [ ] Verify: hello world at localhost:8000, /api/health returns ok, stop script works
+- [x] Create backend pyproject.toml with dependencies (fastapi, uvicorn, python-jose, aiosqlite, openai)
+- [x] Create backend/main.py with /api/health endpoint + static file serving
+- [x] Create Dockerfile (Python base, uv, build frontend, serve static)
+- [x] Create docker-compose.yml (port 8000, mount .env)
+- [x] Create scripts: start.sh, stop.sh, start.ps1, stop.ps1
+- [x] Create temporary static/index.html for hello world test
+- [x] Verify: hello world at localhost:8000, /api/health returns ok, stop script works
 
 ---
 

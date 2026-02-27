@@ -1,0 +1,20 @@
+[project]
+name = "kanban-studio-backend"
+version = "0.1.0"
+description = "FastAPI backend for Kanban Studio"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "python-jose[cryptography]>=3.3",
+    "aiosqlite>=0.21",
+    "openai>=1.82",
+    "python-dotenv>=1.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -53,6 +53,7 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
       className={clsx(
         "group rounded-2xl border-l-[3px] border-l-[var(--accent-yellow)] border border-transparent bg-white px-4 py-4 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
         "transition-all duration-150",
+        "hover:shadow-[0_16px_28px_rgba(3,33,71,0.14)] hover:border-[var(--primary-blue)] hover:-translate-y-0.5",
         isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]"
       )}
       {...attributes}

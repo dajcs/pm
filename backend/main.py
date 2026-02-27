@@ -6,7 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from ai import chat as ai_chat
+from ai import chat as ai_chat, chat_with_board
 from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
 from database import (
     create_card,
@@ -21,6 +21,7 @@ from database import (
 )
 from models import (
     BoardData,
+    ChatRequest,
     CreateCardRequest,
     RenameColumnRequest,
     UpdateCardRequest,
@@ -206,6 +207,27 @@ async def put_columns_order(data: BoardData, board_id: int = Depends(get_board_i
 async def ai_test(_: str = Depends(get_current_user)):
     reply = await ai_chat([{"role": "user", "content": "What is 2+2?"}])
     return {"reply": reply}
+
+
+@app.post("/api/ai/chat")
+async def ai_chat_endpoint(body: ChatRequest, board_id: int = Depends(get_board_id)):
+    board_state = await load_board(board_id)
+    result = await chat_with_board(
+        user_message=body.message,
+        history=[m.model_dump() for m in body.history],
+        board_state=board_state,
+    )
+    # If AI returned a board_update, validate and save it
+    if result["board_update"] is not None:
+        try:
+            updated = BoardData.model_validate(result["board_update"])
+            await save_board(board_id, updated.model_dump())
+            # Return the saved board so the frontend has the canonical version
+            result["board_update"] = await load_board(board_id)
+        except Exception:
+            # If validation fails, drop the board_update
+            result["board_update"] = None
+    return result
 
 
 # --- Static files (must be last) ---

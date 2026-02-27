@@ -96,11 +96,11 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 
 ## Part 9: AI Structured Outputs
 
-- [ ] Define structured output schema (message + optional board_update)
-- [ ] Update AI call to include board state, history, user message
-- [ ] Add POST /api/ai/chat endpoint
-- [ ] System prompt for PM assistant role
-- [ ] Tests: board context included, board_update saved/not-saved, history passed
+- [x] Define structured output schema (message + optional board_update)
+- [x] Update AI call to include board state, history, user message
+- [x] Add POST /api/ai/chat endpoint
+- [x] System prompt for PM assistant role
+- [x] Tests: board context included, board_update saved/not-saved, history passed
 
 ---
 

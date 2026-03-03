@@ -25,7 +25,7 @@ async def test_init_db_seeds_user(client):
     user = await database.get_user_by_username("user")
     assert user is not None
     assert user["username"] == "user"
-    assert user["password_hash"] == database.hash_password("password")
+    assert database.verify_password("password", user["password_hash"])
 
 
 @pytest.mark.anyio
@@ -236,7 +236,7 @@ async def test_rename_column_not_found(client):
 
 
 @pytest.mark.anyio
-async def test_put_columns_order(client):
+async def test_put_board_reorders_columns(client):
     token = await login(client)
     headers = auth_header(token)
 
@@ -250,7 +250,7 @@ async def test_put_columns_order(client):
             "card-2": {"id": "card-2", "title": "Two", "details": "Second"},
         },
     }
-    res = await client.put("/api/board/columns/order", json=board, headers=headers)
+    res = await client.put("/api/board", json=board, headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data["columns"][0]["id"] == "col-b"

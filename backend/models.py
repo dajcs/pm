@@ -1,15 +1,15 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Card(BaseModel):
     id: str
-    title: str
-    details: str = "No details yet."
+    title: str = Field(max_length=200)
+    details: str = Field(default="No details yet.", max_length=4000)
 
 
 class Column(BaseModel):
     id: str
-    title: str
+    title: str = Field(max_length=200)
     cardIds: list[str] = []
 
 
@@ -20,24 +20,24 @@ class BoardData(BaseModel):
 
 class CreateCardRequest(BaseModel):
     column_id: str
-    title: str
-    details: str = "No details yet."
+    title: str = Field(max_length=200)
+    details: str = Field(default="No details yet.", max_length=4000)
 
 
 class UpdateCardRequest(BaseModel):
-    title: str | None = None
-    details: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+    details: str | None = Field(default=None, max_length=4000)
 
 
 class RenameColumnRequest(BaseModel):
-    title: str
+    title: str = Field(max_length=200)
 
 
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    content: str = Field(max_length=2000)
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(max_length=2000)
     history: list[ChatMessage] = []

@@ -31,12 +31,16 @@ describe("KanbanBoard", () => {
     expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
   });
 
-  it("renames a column", async () => {
+  it("renames a column on blur", async () => {
     renderBoard();
     const column = getFirstColumn();
     const input = within(column).getByLabelText("Column title");
     await userEvent.clear(input);
     await userEvent.type(input, "New Name");
+    await userEvent.tab(); // blur to commit
+    await waitFor(() =>
+      expect(api.renameColumn).toHaveBeenCalledWith("col-backlog", "New Name")
+    );
     expect(input).toHaveValue("New Name");
   });
 
@@ -113,5 +117,53 @@ describe("KanbanBoard", () => {
     vi.mocked(api.fetchBoard).mockReturnValue(new Promise(() => {})); // never resolves
     render(<KanbanBoard />);
     expect(screen.getByText("Loading board...")).toBeInTheDocument();
+  });
+
+  it("reverts card delete when API fails", async () => {
+    vi.mocked(api.deleteCard).mockRejectedValueOnce(new Error("Server error"));
+    renderBoard();
+    const column = getFirstColumn();
+
+    expect(within(column).getByText("Align roadmap themes")).toBeInTheDocument();
+
+    const deleteBtn = within(column).getByRole("button", {
+      name: /delete align roadmap themes/i,
+    });
+    await userEvent.click(deleteBtn);
+
+    // Optimistic delete removes the card, API failure restores it
+    await waitFor(() =>
+      expect(within(column).getByText("Align roadmap themes")).toBeInTheDocument()
+    );
+  });
+
+  it("reverts card edit when API fails", async () => {
+    vi.mocked(api.updateCard).mockRejectedValueOnce(new Error("Server error"));
+    renderBoard();
+    const column = getFirstColumn();
+
+    await userEvent.click(within(column).getByText("Align roadmap themes"));
+    const input = within(column).getByLabelText("Edit card title");
+    await userEvent.clear(input);
+    await userEvent.type(input, "Changed title{enter}");
+
+    // Optimistic update shows new title, API failure reverts it
+    await waitFor(() =>
+      expect(within(column).getByText("Align roadmap themes")).toBeInTheDocument()
+    );
+  });
+
+  it("reverts column rename when API fails", async () => {
+    vi.mocked(api.renameColumn).mockRejectedValueOnce(new Error("Server error"));
+    renderBoard();
+    const column = getFirstColumn();
+    const input = within(column).getByLabelText("Column title");
+
+    await userEvent.clear(input);
+    await userEvent.type(input, "New Name");
+    await userEvent.tab(); // blur to commit
+
+    // Optimistic rename applies, API failure reverts to original title
+    await waitFor(() => expect(input).toHaveValue("Backlog"));
   });
 });

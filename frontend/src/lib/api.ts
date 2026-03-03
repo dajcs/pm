@@ -83,7 +83,7 @@ export async function renameColumn(
 }
 
 export async function saveColumnsOrder(data: BoardData): Promise<BoardData> {
-  return request<BoardData>("/api/board/columns/order", {
+  return request<BoardData>("/api/board", {
     method: "PUT",
     body: JSON.stringify(data),
   });

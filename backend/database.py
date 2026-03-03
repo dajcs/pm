@@ -1,8 +1,9 @@
-import hashlib
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 import aiosqlite
+import bcrypt
 
 DATA_DIR = Path(__file__).parent / "data"
 DB_PATH = DATA_DIR / "kanban.db"
@@ -17,7 +18,11 @@ DEFAULT_COLUMNS = [
 
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 
 def get_db_path() -> str:
@@ -122,31 +127,33 @@ async def get_or_create_board(user_id: int) -> int:
 
 
 async def load_board(board_id: int) -> dict:
-    """Load full board data as {columns: [...], cards: {...}}."""
+    """Load full board data as {columns: [...], cards: {...}} in two queries."""
     db = await get_db()
     try:
         cols = await db.execute_fetchall(
-            "SELECT id, title, position FROM columns WHERE board_id = ? ORDER BY position",
+            "SELECT id, title FROM columns WHERE board_id = ? ORDER BY position",
             (board_id,),
         )
-        columns = []
-        cards = {}
-        for col in cols:
-            col_id = col["id"]
-            card_rows = await db.execute_fetchall(
-                "SELECT id, title, details, position FROM cards WHERE column_id = ? ORDER BY position",
-                (col_id,),
-            )
-            card_ids = []
-            for card in card_rows:
-                card_id = card["id"]
-                card_ids.append(card_id)
-                cards[card_id] = {
-                    "id": card_id,
-                    "title": card["title"],
-                    "details": card["details"],
-                }
-            columns.append({"id": col_id, "title": col["title"], "cardIds": card_ids})
+        card_rows = await db.execute_fetchall(
+            """SELECT cards.id, cards.column_id, cards.title, cards.details
+               FROM cards
+               JOIN columns ON cards.column_id = columns.id
+               WHERE columns.board_id = ?
+               ORDER BY columns.position, cards.position""",
+            (board_id,),
+        )
+        cards_by_col: dict[str, list[str]] = {col["id"]: [] for col in cols}
+        cards: dict = {}
+        for card in card_rows:
+            card_id = card["id"]
+            col_id = card["column_id"]
+            cards[card_id] = {"id": card_id, "title": card["title"], "details": card["details"]}
+            if col_id in cards_by_col:
+                cards_by_col[col_id].append(card_id)
+        columns = [
+            {"id": col["id"], "title": col["title"], "cardIds": cards_by_col[col["id"]]}
+            for col in cols
+        ]
         return {"columns": columns, "cards": cards}
     finally:
         await db.close()
@@ -156,9 +163,7 @@ async def save_board(board_id: int, data: dict) -> None:
     """Replace the entire board content (columns + cards) with the provided data."""
     db = await get_db()
     try:
-        # Delete existing columns (cards cascade)
         await db.execute("DELETE FROM columns WHERE board_id = ?", (board_id,))
-
         for position, col in enumerate(data["columns"]):
             await db.execute(
                 "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
@@ -171,45 +176,66 @@ async def save_board(board_id: int, data: dict) -> None:
                         "INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
                         (card["id"], col["id"], card["title"], card.get("details", "No details yet."), card_pos),
                     )
-
         await db.commit()
     finally:
         await db.close()
 
 
-async def create_card(column_id: str, card_id: str, title: str, details: str) -> None:
+async def create_card(board_id: int, column_id: str, title: str, details: str) -> str | None:
+    """Verify column belongs to board, insert card, return card_id. Returns None if column not found."""
     db = await get_db()
     try:
+        cursor = await db.execute(
+            "SELECT id FROM columns WHERE id = ? AND board_id = ?",
+            (column_id, board_id),
+        )
+        if not await cursor.fetchone():
+            return None
         cursor = await db.execute(
             "SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM cards WHERE column_id = ?",
             (column_id,),
         )
         row = await cursor.fetchone()
         position = row["next_pos"]
+        card_id = f"card-{uuid.uuid4().hex[:8]}"
         await db.execute(
             "INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
             (card_id, column_id, title, details, position),
         )
         await db.commit()
+        return card_id
     finally:
         await db.close()
 
 
-async def delete_card(card_id: str) -> bool:
+async def delete_card(card_id: str, board_id: int) -> bool:
+    """Delete card if it belongs to the board. Returns True if deleted, False if not found."""
     db = await get_db()
     try:
-        cursor = await db.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+        cursor = await db.execute(
+            """DELETE FROM cards WHERE id = ?
+               AND column_id IN (SELECT id FROM columns WHERE board_id = ?)""",
+            (card_id, board_id),
+        )
         await db.commit()
         return cursor.rowcount > 0
     finally:
         await db.close()
 
 
-async def update_card(card_id: str, title: str | None, details: str | None) -> bool:
+async def update_card(card_id: str, board_id: int, title: str | None, details: str | None) -> bool:
+    """Update card fields if it belongs to the board. Returns True if found, False if not found."""
     db = await get_db()
     try:
-        fields = []
-        values = []
+        cursor = await db.execute(
+            """SELECT cards.id FROM cards
+               JOIN columns ON cards.column_id = columns.id
+               WHERE cards.id = ? AND columns.board_id = ?""",
+            (card_id, board_id),
+        )
+        if not await cursor.fetchone():
+            return False
+        fields, values = [], []
         if title is not None:
             fields.append("title = ?")
             values.append(title)
@@ -217,22 +243,22 @@ async def update_card(card_id: str, title: str | None, details: str | None) -> b
             fields.append("details = ?")
             values.append(details)
         if not fields:
-            return False
+            return True  # card found, nothing to update
         values.append(card_id)
-        cursor = await db.execute(
-            f"UPDATE cards SET {', '.join(fields)} WHERE id = ?", values
-        )
+        await db.execute(f"UPDATE cards SET {', '.join(fields)} WHERE id = ?", values)
         await db.commit()
-        return cursor.rowcount > 0
+        return True
     finally:
         await db.close()
 
 
-async def rename_column(column_id: str, title: str) -> bool:
+async def rename_column(column_id: str, board_id: int, title: str) -> bool:
+    """Rename column if it belongs to the board. Returns True if updated, False if not found."""
     db = await get_db()
     try:
         cursor = await db.execute(
-            "UPDATE columns SET title = ? WHERE id = ?", (title, column_id)
+            "UPDATE columns SET title = ? WHERE id = ? AND board_id = ?",
+            (title, column_id, board_id),
         )
         await db.commit()
         return cursor.rowcount > 0

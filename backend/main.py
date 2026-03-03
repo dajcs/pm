@@ -1,10 +1,11 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from ai import chat as ai_chat, chat_with_board
 from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
@@ -26,6 +27,8 @@ from models import (
     RenameColumnRequest,
     UpdateCardRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -105,47 +108,17 @@ async def put_board(data: BoardData, board_id: int = Depends(get_board_id)):
 
 
 @app.post("/api/board/cards", status_code=201)
-async def post_card(
-    body: CreateCardRequest, board_id: int = Depends(get_board_id)
-):
-    from database import get_db
-
-    # Verify the column belongs to this board
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            "SELECT id FROM columns WHERE id = ? AND board_id = ?",
-            (body.column_id, board_id),
-        )
-        if not await cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Column not found")
-    finally:
-        await db.close()
-
-    import uuid
-
-    card_id = f"card-{uuid.uuid4().hex[:8]}"
-    await create_card(body.column_id, card_id, body.title, body.details)
+async def post_card(body: CreateCardRequest, board_id: int = Depends(get_board_id)):
+    card_id = await create_card(board_id, body.column_id, body.title, body.details)
+    if card_id is None:
+        raise HTTPException(status_code=404, detail="Column not found")
     return {"id": card_id, "title": body.title, "details": body.details}
 
 
 @app.delete("/api/board/cards/{card_id}")
 async def delete_card_endpoint(card_id: str, board_id: int = Depends(get_board_id)):
-    # Verify card belongs to this board
-    from database import get_db
-
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            "SELECT cards.id FROM cards JOIN columns ON cards.column_id = columns.id WHERE cards.id = ? AND columns.board_id = ?",
-            (card_id, board_id),
-        )
-        if not await cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Card not found")
-    finally:
-        await db.close()
-
-    await delete_card(card_id)
+    if not await delete_card(card_id, board_id):
+        raise HTTPException(status_code=404, detail="Card not found")
     return {"ok": True}
 
 
@@ -153,20 +126,8 @@ async def delete_card_endpoint(card_id: str, board_id: int = Depends(get_board_i
 async def patch_card(
     card_id: str, body: UpdateCardRequest, board_id: int = Depends(get_board_id)
 ):
-    from database import get_db
-
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            "SELECT cards.id FROM cards JOIN columns ON cards.column_id = columns.id WHERE cards.id = ? AND columns.board_id = ?",
-            (card_id, board_id),
-        )
-        if not await cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Card not found")
-    finally:
-        await db.close()
-
-    await update_card(card_id, body.title, body.details)
+    if not await update_card(card_id, board_id, body.title, body.details):
+        raise HTTPException(status_code=404, detail="Card not found")
     return {"ok": True}
 
 
@@ -177,27 +138,9 @@ async def patch_card(
 async def patch_column(
     column_id: str, body: RenameColumnRequest, board_id: int = Depends(get_board_id)
 ):
-    from database import get_db
-
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            "SELECT id FROM columns WHERE id = ? AND board_id = ?",
-            (column_id, board_id),
-        )
-        if not await cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Column not found")
-    finally:
-        await db.close()
-
-    await rename_column(column_id, body.title)
+    if not await rename_column(column_id, board_id, body.title):
+        raise HTTPException(status_code=404, detail="Column not found")
     return {"ok": True}
-
-
-@app.put("/api/board/columns/order")
-async def put_columns_order(data: BoardData, board_id: int = Depends(get_board_id)):
-    await save_board(board_id, data.model_dump())
-    return await load_board(board_id)
 
 
 # --- AI ---
@@ -217,15 +160,13 @@ async def ai_chat_endpoint(body: ChatRequest, board_id: int = Depends(get_board_
         history=[m.model_dump() for m in body.history],
         board_state=board_state,
     )
-    # If AI returned a board_update, validate and save it
     if result["board_update"] is not None:
         try:
             updated = BoardData.model_validate(result["board_update"])
             await save_board(board_id, updated.model_dump())
-            # Return the saved board so the frontend has the canonical version
             result["board_update"] = await load_board(board_id)
-        except Exception:
-            # If validation fails, drop the board_update
+        except ValidationError as exc:
+            logger.warning("AI board_update validation failed: %s", exc)
             result["board_update"] = None
     return result
 

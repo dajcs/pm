@@ -23,7 +23,7 @@ const collisionDetection: CollisionDetection = (args) => {
 };
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { moveCard, type BoardData } from "@/lib/kanban";
+import { moveCard, type BoardData, type Card } from "@/lib/kanban";
 import * as api from "@/lib/api";
 
 interface KanbanBoardProps {
@@ -285,7 +285,7 @@ export const KanbanBoard = ({ onLogout, initialBoard }: KanbanBoardProps) => {
               <KanbanColumn
                 key={column.id}
                 column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                cards={column.cardIds.map((id) => board.cards[id]).filter((c): c is Card => c !== undefined)}
                 isHighlighted={overColumnId === column.id}
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}

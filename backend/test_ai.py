@@ -81,7 +81,8 @@ async def test_chat_with_board_includes_board_context():
     call_args = mock_create.call_args.kwargs["messages"]
     system_msg = call_args[0]
     assert system_msg["role"] == "system"
-    assert '"columns": []' in system_msg["content"]
+    # Board state is serialized with compact separators (no spaces)
+    assert '"columns":[]' in system_msg["content"]
 
 
 @pytest.mark.anyio

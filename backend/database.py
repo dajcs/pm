@@ -65,6 +65,9 @@ async def init_db() -> None:
                 details TEXT NOT NULL DEFAULT 'No details yet.',
                 position INTEGER NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS idx_boards_user_id ON boards(user_id);
+            CREATE INDEX IF NOT EXISTS idx_columns_board_id ON columns(board_id);
+            CREATE INDEX IF NOT EXISTS idx_cards_column_id ON cards(column_id);
         """)
 
         # Seed default user if not exists
@@ -177,6 +180,9 @@ async def save_board(board_id: int, data: dict) -> None:
                         (card["id"], col["id"], card["title"], card.get("details", "No details yet."), card_pos),
                     )
         await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     finally:
         await db.close()
 

@@ -236,6 +236,39 @@ async def test_rename_column_not_found(client):
 
 
 @pytest.mark.anyio
+async def test_put_board_rolls_back_on_duplicate_column_id(client):
+    """save_board must roll back if a mid-insert constraint violation occurs."""
+    token = await login(client)
+    headers = auth_header(token)
+
+    # Establish an initial valid board
+    initial = {
+        "columns": [{"id": "col-keep", "title": "Keep", "cardIds": ["card-keep"]}],
+        "cards": {"card-keep": {"id": "card-keep", "title": "Original", "details": "Data"}},
+    }
+    res = await client.put("/api/board", json=initial, headers=headers)
+    assert res.status_code == 200
+
+    # Attempt to save a board with duplicate column IDs — will fail mid-insert
+    bad_board = {
+        "columns": [
+            {"id": "col-dup", "title": "First", "cardIds": []},
+            {"id": "col-dup", "title": "Duplicate", "cardIds": []},
+        ],
+        "cards": {},
+    }
+    res = await client.put("/api/board", json=bad_board, headers=headers)
+    # Must fail — duplicate primary key
+    assert res.status_code in (400, 422, 500)
+
+    # Original board must still be intact (rollback succeeded)
+    board_res = await client.get("/api/board", headers=headers)
+    data = board_res.json()
+    assert data["columns"][0]["title"] == "Keep"
+    assert "card-keep" in data["cards"]
+
+
+@pytest.mark.anyio
 async def test_put_board_reorders_columns(client):
     token = await login(client)
     headers = auth_header(token)

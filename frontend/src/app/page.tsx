@@ -5,11 +5,12 @@ import { KanbanBoard } from "@/components/KanbanBoard";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { LoginPage } from "@/components/LoginPage";
 import { setAuthErrorHandler } from "@/lib/api";
+import type { BoardData } from "@/lib/kanban";
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
-  const [boardKey, setBoardKey] = useState(0);
+  const [pendingBoard, setPendingBoard] = useState<BoardData | null>(null);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
@@ -43,8 +44,12 @@ export default function Home() {
     setToken(jwt);
   }, []);
 
-  const handleBoardUpdated = useCallback(() => {
-    setBoardKey((k) => k + 1);
+  const handleBoardUpdated = useCallback((board: BoardData) => {
+    setPendingBoard(board);
+  }, []);
+
+  const handlePendingBoardApplied = useCallback(() => {
+    setPendingBoard(null);
   }, []);
 
   if (checking) return null;
@@ -54,7 +59,11 @@ export default function Home() {
   return (
     <div className="flex min-h-screen">
       <div className="flex-1 overflow-auto">
-        <KanbanBoard key={boardKey} onLogout={handleLogout} />
+        <KanbanBoard
+          onLogout={handleLogout}
+          pendingBoard={pendingBoard}
+          onPendingBoardApplied={handlePendingBoardApplied}
+        />
       </div>
       <div className="sticky top-0 h-screen p-4 pl-0">
         <ChatSidebar onBoardUpdated={handleBoardUpdated} />

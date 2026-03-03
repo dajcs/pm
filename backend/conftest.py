@@ -6,10 +6,12 @@ import tempfile
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+# Disable rate limiting in tests
+os.environ["DISABLE_RATE_LIMIT"] = "true"
+
 # Patch DB_PATH before importing app
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _tmp.close()
-os.environ["KANBAN_TEST_DB"] = _tmp.name
 
 import database  # noqa: E402
 
@@ -20,15 +22,20 @@ from main import app  # noqa: E402
 
 @pytest.fixture(autouse=True)
 async def _reset_db():
-    """Re-initialize the database before each test."""
-    # Remove old DB and re-init
-    db_path = database.get_db_path()
-    if os.path.exists(db_path):
-        os.unlink(db_path)
+    """Re-initialize the database before each test using table drops (works on Windows)."""
+    db = await database.get_db()
+    try:
+        await db.executescript("""
+            DROP TABLE IF EXISTS cards;
+            DROP TABLE IF EXISTS columns;
+            DROP TABLE IF EXISTS boards;
+            DROP TABLE IF EXISTS users;
+        """)
+        await db.commit()
+    finally:
+        await db.close()
     await database.init_db()
     yield
-    if os.path.exists(db_path):
-        os.unlink(db_path)
 
 
 @pytest.fixture

@@ -3,20 +3,11 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { ChatMessage, type ChatMsg } from "@/components/ChatMessage";
 import * as api from "@/lib/api";
+import type { BoardData } from "@/lib/kanban";
 
 interface ChatSidebarProps {
-  /** Called when the AI mutates the board so the parent can refresh. */
-  onBoardUpdated?: () => void;
-}
-
-let nextId = 1;
-function genId() {
-  return `msg-${nextId++}`;
-}
-
-/** Reset ID counter (for tests). */
-export function resetIdCounter() {
-  nextId = 1;
+  /** Called with the new board data when the AI mutates the board. */
+  onBoardUpdated?: (board: BoardData) => void;
 }
 
 export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
@@ -46,18 +37,18 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
         const result = await api.sendChatMessage(userMessage, apiHistory);
 
         const assistantMsg: ChatMsg = {
-          id: genId(),
+          id: crypto.randomUUID(),
           role: "assistant",
           content: result.message,
         };
         setMessages((prev) => [...prev, assistantMsg]);
 
         if (result.board_update) {
-          onBoardUpdated?.();
+          onBoardUpdated?.(result.board_update);
         }
       } catch {
         const errorMsg: ChatMsg = {
-          id: genId(),
+          id: crypto.randomUUID(),
           role: "assistant",
           content: "Sorry, something went wrong. Please try again.",
         };
@@ -73,7 +64,7 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
     const text = input.trim();
     if (!text || sending) return;
 
-    const userMsg: ChatMsg = { id: genId(), role: "user", content: text };
+    const userMsg: ChatMsg = { id: crypto.randomUUID(), role: "user", content: text };
     const updated = [...messages, userMsg];
     setMessages(updated);
     setInput("");
@@ -94,12 +85,10 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
       const idx = messages.findIndex((m) => m.id === id);
       if (idx === -1) return;
 
-      // Replace the message and remove all subsequent ones
       const edited: ChatMsg = { ...messages[idx], content };
       const truncated = [...messages.slice(0, idx), edited];
       setMessages(truncated);
 
-      // Re-send to AI with the edited history
       const historyForAI = truncated.slice(0, -1);
       sendToAI(content, historyForAI);
     },

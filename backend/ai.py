@@ -69,7 +69,7 @@ async def chat_with_board(
 
     Returns dict with "message" (str) and "board_update" (dict | None).
     """
-    system_content = SYSTEM_PROMPT + json.dumps(board_state, indent=2)
+    system_content = SYSTEM_PROMPT + json.dumps(board_state, separators=(",", ":"))
 
     messages: list[dict] = [{"role": "system", "content": system_content}]
     messages.extend(history)

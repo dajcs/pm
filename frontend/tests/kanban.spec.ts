@@ -125,19 +125,21 @@ test("sends a chat message and displays AI response", async ({ page }) => {
   await expect(page.getByText("I can help with that!")).toBeVisible();
 });
 
-test("AI board_update triggers board refresh", async ({ page }) => {
+test("AI board_update applies new board state directly", async ({ page }) => {
   await setupMocks(page);
 
-  // Override /api/board to count GET calls (registered after setupMocks, takes precedence)
-  let boardFetchCount = 0;
-  await page.route("/api/board", (route) => {
-    if (route.request().method() === "GET") boardFetchCount++;
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(MOCK_BOARD),
-    });
-  });
+  // Return a board with a new AI-created card in the board_update
+  const updatedBoard = {
+    ...MOCK_BOARD,
+    columns: [
+      { id: "col-backlog", title: "Backlog", cardIds: ["card-1", "card-2", "card-ai"] },
+      ...MOCK_BOARD.columns.slice(1),
+    ],
+    cards: {
+      ...MOCK_BOARD.cards,
+      "card-ai": { id: "card-ai", title: "AI Created Card", details: "Made by AI." },
+    },
+  };
 
   await page.route("/api/ai/chat", (route) =>
     route.fulfill({
@@ -145,18 +147,18 @@ test("AI board_update triggers board refresh", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify({
         message: "Done, I added a card for you.",
-        board_update: { ...MOCK_BOARD },
+        board_update: updatedBoard,
       }),
     })
   );
 
   await page.goto("/");
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
-  const countAfterLoad = boardFetchCount;
 
   await page.getByPlaceholder("Ask the AI...").fill("Add a card");
   await page.getByRole("button", { name: /send/i }).click();
 
   await expect(page.getByText("Done, I added a card for you.")).toBeVisible();
-  await expect.poll(() => boardFetchCount).toBeGreaterThan(countAfterLoad);
+  // The board is updated in-place with the AI's board_update — no remount needed
+  await expect(page.getByText("AI Created Card")).toBeVisible();
 });

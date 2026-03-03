@@ -1,6 +1,6 @@
 # Kanban Studio MVP — Comprehensive Code Review
 
-**Date:** 2026-03-02
+**Date:** 2026-03-02 (remediated 2026-03-03)
 **Scope:** Full stack (backend Python/FastAPI + frontend Next.js/React) + infrastructure
 
 ---
@@ -499,52 +499,54 @@ HEALTHCHECK --interval=30s --timeout=5s CMD curl -f http://localhost:8000/api/he
 
 ## Summary Table
 
-| ID | Severity | Area | Location | Summary |
-|---|---|---|---|---|
-| SEC-1 | Critical | Security | `auth.py:5,9–10` | Hardcoded JWT secret and credentials |
-| SEC-2 | High | Security | `models.py` | No input length validation |
-| SEC-3 | High | Security | `main.py:227–229` | Silent swallow of AI validation errors |
-| SEC-4 | High | Security | `database.py:20` | SHA-256 password hashing without salt |
-| SEC-5 | Medium | Security | `main.py` | No CORS configuration |
-| SEC-6 | Medium | Security | `page.tsx:15`; `api.ts:10` | JWT in localStorage |
-| SEC-7 | Medium | Security | `main.py` | No rate limiting on login or AI chat |
-| SEC-8 | Low | Security | repo root | No `.env.example` |
-| BUG-1 | High | Correctness | `KanbanColumn.tsx:48` | API call on every rename keystroke |
-| BUG-2 | High | Correctness | `KanbanBoard.tsx:288` | Possible `undefined` card at render |
-| BUG-3 | High | Correctness | `database.py:27–32` | New DB connection per sub-operation |
-| BUG-4 | Medium | Correctness | `main.py:98–101,197–200` | Duplicate identical endpoints |
-| BUG-5 | Medium | Correctness | `database.py:155–177` | Implicit rollback on partial write |
-| BUG-6 | Medium | Correctness | `kanban.ts:18–72` | Fixture IDs mismatch backend columns |
-| BUG-7 | Medium | Correctness | `conftest.py:22–31` | File-delete isolation fragile on Windows |
-| BUG-8 | Low | Correctness | `kanban.ts:164–168` | `createId` is dead code |
-| BUG-9 | Low | Correctness | `main.py:125` | Imports inside function bodies |
-| BUG-10 | Low | Correctness | `conftest.py:12` | `KANBAN_TEST_DB` env var never read |
-| TST-2 | High | Testing | `KanbanBoard.test.tsx` | No tests for optimistic rollback on failure |
-| TST-3 | Medium | Testing | `KanbanBoard.test.tsx` | No unit test for drag-end integration |
-| TST-4 | Medium | Testing | `test_api.py` | No test for partial write failure |
-| TST-5 | Medium | Testing | `kanban.test.ts` | `moveCard` edge cases untested |
-| TST-6 | Medium | Testing | `playwright.config.ts` | Only Chromium; no Firefox/WebKit |
-| TST-7 | Info | Testing | `pyproject.toml:24` | `asyncio_mode` key targets wrong library |
-| QUA-1 | Medium | Quality | `main.py:111–191` | Ownership-check pattern repeated 4× |
-| QUA-2 | Medium | Quality | `ChatSidebar.tsx:12–19` | Module-level mutable state for ID counter |
-| QUA-3 | Medium | Quality | `KanbanCard.tsx:31–38` | Edit always commits both fields |
-| QUA-4 | Low | Quality | `main.py:35–37` | `LoginRequest` defined in wrong file |
-| QUA-5 | Low | Quality | `main.py:9` | Unused `ai_chat` alias |
-| QUA-6 | Low | Quality | `KanbanBoard.tsx:88–97` | Drag handlers not memoized |
-| QUA-7 | Low | Quality | `KanbanCard.tsx:40–43` | Enter commits textarea; Shift+Enter not handled |
-| PERF-1 | High | Performance | `database.py:124–152` | N+1 queries in `load_board` |
-| PERF-2 | Medium | Performance | `database.py:38–63` | No indexes on FK columns |
-| PERF-3 | Medium | Performance | `ai.py:72` | Full board JSON with `indent=2` per AI call |
-| PERF-4 | Low | Performance | `KanbanBoard.tsx:75` | `useMemo` on object ref always re-runs |
-| ARCH-1 | Medium | Architecture | `database.py:155–177` | Full-replace save; last-write-wins |
-| ARCH-2 | Medium | Architecture | `page.tsx:46–48` | Board refresh via full remount |
-| ARCH-3 | Low | Architecture | `kanban.ts:18–72` | Fixture data in production bundle |
-| ARCH-4 | Low | Architecture | `main.py` | OpenAPI auth scheme not declared |
-| INF-1 | Medium | Infrastructure | `Dockerfile` | Container runs as root |
-| INF-2 | Medium | Infrastructure | `Dockerfile:17` | `uv pip --system` bypasses isolation |
-| INF-3 | Medium | Infrastructure | `Dockerfile`; `pyproject.toml` | No lockfile, non-reproducible builds |
-| INF-4 | Low | Infrastructure | `docker-compose.yml` | No restart policy |
-| INF-5 | Info | Infrastructure | `Dockerfile` | No `HEALTHCHECK` instruction |
+Legend: ✅ Fixed | ⚠️ Documented/Deferred | — Unchanged
+
+| ID | Severity | Area | Location | Summary | Status |
+|---|---|---|---|---|---|
+| SEC-1 | Critical | Security | `auth.py:5,9–10` | Hardcoded JWT secret and credentials | ✅ |
+| SEC-2 | High | Security | `models.py` | No input length validation | ✅ |
+| SEC-3 | High | Security | `main.py:227–229` | Silent swallow of AI validation errors | ✅ |
+| SEC-4 | High | Security | `database.py:20` | SHA-256 password hashing without salt | ✅ |
+| SEC-5 | Medium | Security | `main.py` | No CORS configuration | ✅ CORSMiddleware + CORS_ORIGINS env var |
+| SEC-6 | Medium | Security | `page.tsx:15`; `api.ts:10` | JWT in localStorage | ⚠️ Acceptable for MVP; httpOnly cookies for production |
+| SEC-7 | Medium | Security | `main.py` | No rate limiting on login or AI chat | ✅ slowapi: 5/min login, 30/min AI; DISABLE_RATE_LIMIT for tests |
+| SEC-8 | Low | Security | repo root | No `.env.example` | ✅ |
+| BUG-1 | High | Correctness | `KanbanColumn.tsx:48` | API call on every rename keystroke | ✅ |
+| BUG-2 | High | Correctness | `KanbanBoard.tsx:288` | Possible `undefined` card at render | ✅ |
+| BUG-3 | High | Correctness | `database.py:27–32` | New DB connection per sub-operation | ✅ |
+| BUG-4 | Medium | Correctness | `main.py:98–101,197–200` | Duplicate identical endpoints | ✅ |
+| BUG-5 | Medium | Correctness | `database.py:155–177` | Implicit rollback on partial write | ✅ explicit `await db.rollback()` in `except` |
+| BUG-6 | Medium | Correctness | `kanban.ts:18–72` | Fixture IDs mismatch backend columns | ✅ `initialData` moved to `src/test/fixtures.ts` |
+| BUG-7 | Medium | Correctness | `conftest.py:22–31` | File-delete isolation fragile on Windows | ✅ table-drop instead of `os.unlink` |
+| BUG-8 | Low | Correctness | `kanban.ts:164–168` | `createId` is dead code | ✅ removed |
+| BUG-9 | Low | Correctness | `main.py:125` | Imports inside function bodies | ✅ moved to module top |
+| BUG-10 | Low | Correctness | `conftest.py:12` | `KANBAN_TEST_DB` env var never read | ✅ removed |
+| TST-2 | High | Testing | `KanbanBoard.test.tsx` | No tests for optimistic rollback on failure | ✅ |
+| TST-3 | Medium | Testing | `KanbanBoard.test.tsx` | No unit test for drag-end integration | ✅ `KanbanBoard.drag.test.tsx` with dnd-kit mock |
+| TST-4 | Medium | Testing | `test_api.py` | No test for partial write failure | ✅ `test_put_board_rolls_back_on_duplicate_column_id` |
+| TST-5 | Medium | Testing | `kanban.test.ts` | `moveCard` edge cases untested | ✅ 4 new edge-case tests |
+| TST-6 | Medium | Testing | `playwright.config.ts` | Only Chromium; no Firefox/WebKit | ✅ firefox + webkit projects added |
+| TST-7 | Info | Testing | `pyproject.toml:24` | `asyncio_mode` key targets wrong library | ✅ removed |
+| QUA-1 | Medium | Quality | `main.py:111–191` | Ownership-check pattern repeated 4× | ✅ consolidated via board_id DB parameter (BUG-3) |
+| QUA-2 | Medium | Quality | `ChatSidebar.tsx:12–19` | Module-level mutable state for ID counter | ✅ `crypto.randomUUID()`; `resetIdCounter` removed |
+| QUA-3 | Medium | Quality | `KanbanCard.tsx:31–38` | Edit always commits both fields | ✅ `handleEditCard` only sends changed fields |
+| QUA-4 | Low | Quality | `main.py:35–37` | `LoginRequest` defined in wrong file | ✅ moved to `models.py` |
+| QUA-5 | Low | Quality | `main.py:9` | Unused `ai_chat` alias | ✅ removed; inline import in test endpoint only |
+| QUA-6 | Low | Quality | `KanbanBoard.tsx:88–97` | Drag handlers not memoized | ✅ `handleDragStart`, `handleDragOver`, `handleDragEnd` in `useCallback` |
+| QUA-7 | Low | Quality | `KanbanCard.tsx:40–43` | Enter commits textarea; Shift+Enter not handled | ✅ Shift+Enter inserts newline in details |
+| PERF-1 | High | Performance | `database.py:124–152` | N+1 queries in `load_board` | ✅ |
+| PERF-2 | Medium | Performance | `database.py:38–63` | No indexes on FK columns | ✅ 3 indexes added in `init_db` |
+| PERF-3 | Medium | Performance | `ai.py:72` | Full board JSON with `indent=2` per AI call | ✅ `separators=(",",":")` compact JSON |
+| PERF-4 | Low | Performance | `KanbanBoard.tsx:75` | `useMemo` on object ref always re-runs | ✅ removed; inline `board?.cards[id]` |
+| ARCH-1 | Medium | Architecture | `database.py:155–177` | Full-replace save; last-write-wins | ⚠️ Acceptable for single-user MVP |
+| ARCH-2 | Medium | Architecture | `page.tsx:46–48` | Board refresh via full remount | ✅ `pendingBoard` prop; `setBoard` in-place |
+| ARCH-3 | Low | Architecture | `kanban.ts:18–72` | Fixture data in production bundle | ✅ moved to `src/test/fixtures.ts` |
+| ARCH-4 | Low | Architecture | `main.py` | OpenAPI auth scheme not declared | ✅ `Security(security)` in `get_current_user` |
+| INF-1 | Medium | Infrastructure | `Dockerfile` | Container runs as root | ✅ `adduser appuser; USER appuser` |
+| INF-2 | Medium | Infrastructure | `Dockerfile:17` | `uv pip --system` bypasses isolation | ✅ `uv venv /app/.venv` + venv pip |
+| INF-3 | Medium | Infrastructure | `Dockerfile`; `pyproject.toml` | No lockfile, non-reproducible builds | ⚠️ Run `uv lock` in `backend/` and commit `uv.lock`; Dockerfile ready for `uv sync --frozen` |
+| INF-4 | Low | Infrastructure | `docker-compose.yml` | No restart policy | ✅ `restart: unless-stopped` |
+| INF-5 | Info | Infrastructure | `Dockerfile` | No `HEALTHCHECK` instruction | ⚠️ Add `HEALTHCHECK CMD curl -f http://localhost:8000/api/health` before production |
 
 ---
 

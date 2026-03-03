@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ChatSidebar, resetIdCounter } from "@/components/ChatSidebar";
+import { ChatSidebar } from "@/components/ChatSidebar";
 import * as api from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -17,7 +17,6 @@ vi.mock("@/lib/api", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  resetIdCounter();
 });
 
 describe("ChatSidebar", () => {
@@ -53,11 +52,12 @@ describe("ChatSidebar", () => {
     expect(input).toHaveValue("");
   });
 
-  it("calls onBoardUpdated when AI returns board_update", async () => {
+  it("calls onBoardUpdated with board data when AI returns board_update", async () => {
     const onBoardUpdated = vi.fn();
+    const boardUpdate = { columns: [], cards: {} };
     vi.mocked(api.sendChatMessage).mockResolvedValueOnce({
       message: "Done, card created.",
-      board_update: { columns: [], cards: {} },
+      board_update: boardUpdate,
     });
 
     render(<ChatSidebar onBoardUpdated={onBoardUpdated} />);
@@ -65,7 +65,7 @@ describe("ChatSidebar", () => {
     await userEvent.type(screen.getByPlaceholderText("Ask the AI..."), "Create a card");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
-    await waitFor(() => expect(onBoardUpdated).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onBoardUpdated).toHaveBeenCalledWith(boardUpdate));
   });
 
   it("editing a user message clears subsequent messages", async () => {

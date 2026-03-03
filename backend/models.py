@@ -1,6 +1,11 @@
 from pydantic import BaseModel, Field
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 class Card(BaseModel):
     id: str
     title: str = Field(max_length=200)

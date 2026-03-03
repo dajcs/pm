@@ -1,13 +1,19 @@
 import logging
+import os
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-from ai import chat as ai_chat, chat_with_board
+from ai import chat_with_board
 from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
 from database import (
     create_card,
@@ -24,6 +30,7 @@ from models import (
     BoardData,
     ChatRequest,
     CreateCardRequest,
+    LoginRequest,
     RenameColumnRequest,
     UpdateCardRequest,
 )
@@ -32,12 +39,18 @@ logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+_RATE_LIMIT_ENABLED = os.environ.get("DISABLE_RATE_LIMIT", "").lower() != "true"
+
+limiter = Limiter(key_func=get_remote_address)
+
 security = HTTPBearer(auto_error=False)
 
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
+def _limit(rate: str):
+    """Apply rate limit unless disabled (for tests)."""
+    if _RATE_LIMIT_ENABLED:
+        return limiter.limit(rate)
+    return lambda f: f
 
 
 @asynccontextmanager
@@ -46,11 +59,27 @@ async def lifespan(app: FastAPI):
     yield
 
 
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
+
 app = FastAPI(title="Kanban Studio API", lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Security(security),
 ) -> str:
     if credentials is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -79,7 +108,8 @@ async def health():
 
 
 @app.post("/api/auth/login")
-async def login(body: LoginRequest):
+@_limit("5/minute")
+async def login(request: Request, body: LoginRequest):
     if body.username != VALID_USERNAME or body.password != VALID_PASSWORD:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return {"token": create_token(body.username)}
@@ -100,7 +130,10 @@ async def get_board(board_id: int = Depends(get_board_id)):
 
 @app.put("/api/board")
 async def put_board(data: BoardData, board_id: int = Depends(get_board_id)):
-    await save_board(board_id, data.model_dump())
+    try:
+        await save_board(board_id, data.model_dump())
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=400, detail=f"Board data error: {exc}")
     return await load_board(board_id)
 
 
@@ -148,12 +181,14 @@ async def patch_column(
 
 @app.post("/api/ai/test")
 async def ai_test(_: str = Depends(get_current_user)):
-    reply = await ai_chat([{"role": "user", "content": "What is 2+2?"}])
+    from ai import chat as _ai_chat
+    reply = await _ai_chat([{"role": "user", "content": "What is 2+2?"}])
     return {"reply": reply}
 
 
 @app.post("/api/ai/chat")
-async def ai_chat_endpoint(body: ChatRequest, board_id: int = Depends(get_board_id)):
+@_limit("30/minute")
+async def ai_chat_endpoint(request: Request, body: ChatRequest, board_id: int = Depends(get_board_id)):
     board_state = await load_board(board_id)
     result = await chat_with_board(
         user_message=body.message,

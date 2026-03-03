@@ -38,11 +38,12 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
+    if (e.key === "Escape") {
+      setEditingField(null);
+    } else if (e.key === "Enter" && (editingField !== "details" || !e.shiftKey)) {
+      // Title: Enter commits. Details: Enter commits, Shift+Enter inserts newline.
       e.preventDefault();
       commitEdit();
-    } else if (e.key === "Escape") {
-      setEditingField(null);
     }
   };
 

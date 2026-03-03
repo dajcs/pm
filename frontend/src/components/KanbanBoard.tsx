@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -30,9 +30,18 @@ interface KanbanBoardProps {
   onLogout?: () => void;
   /** Supply initial board data (used in tests to skip API fetch). */
   initialBoard?: BoardData;
+  /** Board data from an external update (e.g. AI mutation). Applied in-place. */
+  pendingBoard?: BoardData | null;
+  /** Called after pendingBoard has been applied to internal state. */
+  onPendingBoardApplied?: () => void;
 }
 
-export const KanbanBoard = ({ onLogout, initialBoard }: KanbanBoardProps) => {
+export const KanbanBoard = ({
+  onLogout,
+  initialBoard,
+  pendingBoard,
+  onPendingBoardApplied,
+}: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(initialBoard ?? null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
@@ -66,13 +75,19 @@ export const KanbanBoard = ({ onLogout, initialBoard }: KanbanBoardProps) => {
     };
   }, [initialBoard, showError]);
 
+  // Apply external board update in-place (avoids full remount)
+  useEffect(() => {
+    if (pendingBoard) {
+      setBoard(pendingBoard);
+      onPendingBoardApplied?.();
+    }
+  }, [pendingBoard, onPendingBoardApplied]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
     })
   );
-
-  const cardsById = useMemo(() => board?.cards ?? {}, [board?.cards]);
 
   const findColumnForItem = useCallback(
     (itemId: string): string | null => {
@@ -85,37 +100,46 @@ export const KanbanBoard = ({ onLogout, initialBoard }: KanbanBoardProps) => {
     [board]
   );
 
-  const handleDragStart = (event: DragStartEvent) => {
-    const id = event.active.id as string;
-    setActiveCardId(id);
-    setOverColumnId(findColumnForItem(id));
-  };
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const id = event.active.id as string;
+      setActiveCardId(id);
+      setOverColumnId(findColumnForItem(id));
+    },
+    [findColumnForItem]
+  );
 
-  const handleDragOver = (event: DragOverEvent) => {
-    const overId = event.over?.id as string | undefined;
-    setOverColumnId(overId ? findColumnForItem(overId) : null);
-  };
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const overId = event.over?.id as string | undefined;
+      setOverColumnId(overId ? findColumnForItem(overId) : null);
+    },
+    [findColumnForItem]
+  );
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveCardId(null);
-    setOverColumnId(null);
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveCardId(null);
+      setOverColumnId(null);
 
-    if (!over || active.id === over.id || !board) return;
+      if (!over || active.id === over.id || !board) return;
 
-    const newColumns = moveCard(
-      board.columns,
-      active.id as string,
-      over.id as string
-    );
-    const updated = { ...board, columns: newColumns };
-    setBoard(updated);
+      const newColumns = moveCard(
+        board.columns,
+        active.id as string,
+        over.id as string
+      );
+      const updated = { ...board, columns: newColumns };
+      setBoard(updated);
 
-    api.saveColumnsOrder(updated).catch((err) => {
-      setBoard(board);
-      showError(err.message);
-    });
-  };
+      api.saveColumnsOrder(updated).catch((err) => {
+        setBoard(board);
+        showError(err.message);
+      });
+    },
+    [board, showError]
+  );
 
   const handleRenameColumn = (columnId: string, title: string) => {
     if (!board) return;
@@ -183,22 +207,28 @@ export const KanbanBoard = ({ onLogout, initialBoard }: KanbanBoardProps) => {
 
   const handleEditCard = (cardId: string, title: string, details: string) => {
     if (!board) return;
+    const existing = board.cards[cardId];
     const prev = board;
     setBoard({
       ...board,
       cards: {
         ...board.cards,
-        [cardId]: { ...board.cards[cardId], title, details },
+        [cardId]: { ...existing, title, details },
       },
     });
 
-    api.updateCard(cardId, { title, details }).catch((err) => {
+    // Only send fields that actually changed
+    const fields: { title?: string; details?: string } = {};
+    if (title !== existing?.title) fields.title = title;
+    if (details !== existing?.details) fields.details = details;
+
+    api.updateCard(cardId, fields).catch((err) => {
       setBoard(prev);
       showError(err.message);
     });
   };
 
-  const activeCard = activeCardId ? cardsById[activeCardId] : null;
+  const activeCard = activeCardId && board ? board.cards[activeCardId] : null;
 
   if (loading) {
     return (

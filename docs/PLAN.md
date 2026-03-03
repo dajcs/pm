@@ -8,7 +8,7 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 
 - [x] Create frontend/AGENTS.md describing existing frontend code
 - [x] Enrich docs/PLAN.md with full checklist plan
-- [ ] User reviews and approves the plan
+- [x] User reviews and approves the plan
 
 ---
 
@@ -114,4 +114,4 @@ Full plan with detailed prompt: `.github/prompts/plan-kanbanStudioMvp.prompt.md`
 - [x] Delete message: remove it and all subsequent
 - [x] Auto-refetch board on board_update from AI
 - [x] Unit tests: send, edit, delete messages (7 tests)
-- [ ] E2E tests: chat flow, AI board mutation
+- [x] E2E tests: chat flow, AI board mutation

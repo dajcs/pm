@@ -17,6 +17,8 @@ type KanbanColumnProps = {
   onDeleteColumn?: (columnId: string) => void;
   onUpdatePriority?: (cardId: string, priority: string) => void;
   onUpdateDueDate?: (cardId: string, dueDate: string | null) => void;
+  onUpdateLabels?: (cardId: string, labels: string[]) => void;
+  onSetWipLimit?: (columnId: string, wipLimit: number | null) => void;
 };
 
 export const KanbanColumn = ({
@@ -30,9 +32,13 @@ export const KanbanColumn = ({
   onDeleteColumn,
   onUpdatePriority,
   onUpdateDueDate,
+  onUpdateLabels,
+  onSetWipLimit,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
+  const [editingWip, setEditingWip] = useState(false);
+  const [wipInput, setWipInput] = useState("");
 
   // Sync local title if column prop changes (e.g. after API rollback)
   useEffect(() => {
@@ -59,24 +65,62 @@ export const KanbanColumn = ({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="w-full">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="h-1.5 w-12 rounded-full bg-[var(--secondary-purple)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]">
-              {cards.length} cards
-            </span>
-            {onDeleteColumn && (
-              <button
-                title="Delete column"
-                onClick={() => {
-                  if (confirm(`Delete column "${column.title}" and all its cards?`)) {
-                    onDeleteColumn(column.id);
-                  }
-                }}
-                className="ml-auto text-xs text-[var(--gray-text)] hover:text-red-600 transition-colors"
-              >
-                delete
-              </button>
+            {column.wip_limit ? (
+              <span className={`text-xs font-semibold uppercase tracking-[0.15em] ${cards.length > column.wip_limit ? "text-red-500" : "text-[var(--navy-dark)]"}`}>
+                {cards.length}/{column.wip_limit}
+              </span>
+            ) : (
+              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]">
+                {cards.length} cards
+              </span>
             )}
+            <div className="ml-auto flex items-center gap-1">
+              {onSetWipLimit && (
+                editingWip ? (
+                  <input
+                    autoFocus
+                    type="number"
+                    min={1}
+                    placeholder="limit"
+                    value={wipInput}
+                    onChange={(e) => setWipInput(e.target.value)}
+                    onBlur={() => {
+                      const n = parseInt(wipInput, 10);
+                      onSetWipLimit(column.id, isNaN(n) || n < 1 ? null : n);
+                      setEditingWip(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") { setEditingWip(false); }
+                    }}
+                    className="w-14 rounded border border-[var(--primary-blue)] px-1 py-0.5 text-xs outline-none"
+                  />
+                ) : (
+                  <button
+                    title={column.wip_limit ? `WIP limit: ${column.wip_limit} (click to change)` : "Set WIP limit"}
+                    onClick={() => { setWipInput(column.wip_limit?.toString() ?? ""); setEditingWip(true); }}
+                    className="text-xs text-[var(--gray-text)] hover:text-[var(--navy-dark)] transition-colors px-0.5"
+                  >
+                    wip
+                  </button>
+                )
+              )}
+              {onDeleteColumn && (
+                <button
+                  title="Delete column"
+                  onClick={() => {
+                    if (confirm(`Delete column "${column.title}" and all its cards?`)) {
+                      onDeleteColumn(column.id);
+                    }
+                  }}
+                  className="text-xs text-[var(--gray-text)] hover:text-red-600 transition-colors px-0.5"
+                >
+                  del
+                </button>
+              )}
+            </div>
           </div>
           <input
             value={localTitle}
@@ -100,6 +144,7 @@ export const KanbanColumn = ({
               onEdit={onEditCard}
               onUpdatePriority={onUpdatePriority}
               onUpdateDueDate={onUpdateDueDate}
+              onUpdateLabels={onUpdateLabels}
             />
           ))}
         </SortableContext>

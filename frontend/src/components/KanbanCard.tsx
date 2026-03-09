@@ -10,9 +10,20 @@ type KanbanCardProps = {
   onEdit: (cardId: string, title: string, details: string) => void;
   onUpdatePriority?: (cardId: string, priority: string) => void;
   onUpdateDueDate?: (cardId: string, dueDate: string | null) => void;
+  onUpdateLabels?: (cardId: string, labels: string[]) => void;
 };
 
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
+
+const LABEL_OPTIONS = ["bug", "feature", "improvement", "docs", "testing", "blocked"];
+const LABEL_COLORS: Record<string, string> = {
+  bug: "bg-red-100 text-red-700 border-red-200",
+  feature: "bg-blue-100 text-blue-700 border-blue-200",
+  improvement: "bg-purple-100 text-purple-700 border-purple-200",
+  docs: "bg-gray-100 text-gray-700 border-gray-200",
+  testing: "bg-green-100 text-green-700 border-green-200",
+  blocked: "bg-orange-100 text-orange-700 border-orange-200",
+};
 
 const PRIORITY_STYLES: Record<string, { dot: string; label: string }> = {
   none:   { dot: "bg-[var(--gray-text)]", label: "none" },
@@ -33,8 +44,9 @@ function getDueDateStyle(dueDate: string | null | undefined): string {
   return "text-[var(--gray-text)]";
 }
 
-export const KanbanCard = ({ card, onDelete, onEdit, onUpdatePriority, onUpdateDueDate }: KanbanCardProps) => {
+export const KanbanCard = ({ card, onDelete, onEdit, onUpdatePriority, onUpdateDueDate, onUpdateLabels }: KanbanCardProps) => {
   const [editingField, setEditingField] = useState<"title" | "details" | "due_date" | null>(null);
+  const [showLabels, setShowLabels] = useState(false);
   const [editTitle, setEditTitle] = useState(card.title);
   const [editDetails, setEditDetails] = useState(card.details);
   const [editDueDate, setEditDueDate] = useState(card.due_date ?? "");
@@ -160,6 +172,48 @@ export const KanbanCard = ({ card, onDelete, onEdit, onUpdatePriority, onUpdateD
               {card.details}
             </p>
           )}
+          {/* Labels row */}
+          {((card.labels ?? []).length > 0 || showLabels) && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {(card.labels ?? []).map((label) => (
+                <span
+                  key={label}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${LABEL_COLORS[label] ?? "bg-gray-100 text-gray-700 border-gray-200"}`}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+          {showLabels && onUpdateLabels && (
+            <div className="mt-1 flex flex-wrap gap-1 rounded-xl border border-[var(--stroke)] bg-[var(--surface)] p-2">
+              {LABEL_OPTIONS.map((label) => {
+                const active = (card.labels ?? []).includes(label);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const current = card.labels ?? [];
+                      const next = active ? current.filter((l) => l !== label) : [...current, label];
+                      onUpdateLabels(card.id, next);
+                    }}
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-opacity ${LABEL_COLORS[label] ?? "bg-gray-100 text-gray-700 border-gray-200"} ${active ? "opacity-100" : "opacity-40"}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowLabels(false); }}
+                className="ml-auto text-[10px] text-[var(--gray-text)] hover:text-[var(--navy-dark)]"
+              >
+                done
+              </button>
+            </div>
+          )}
           <div className="mt-2 flex items-center gap-2">
             <button
               type="button"
@@ -171,6 +225,17 @@ export const KanbanCard = ({ card, onDelete, onEdit, onUpdatePriority, onUpdateD
               <span className={clsx("h-2 w-2 rounded-full", priorityStyle.dot)} />
               {priorityStyle.label}
             </button>
+            {onUpdateLabels && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowLabels((v) => !v); }}
+                className="flex items-center gap-1 rounded-full border border-[var(--stroke)] px-2 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--primary-blue)] transition-colors"
+                aria-label="Edit labels"
+                title="Labels"
+              >
+                tag
+              </button>
+            )}
             {editingField === "due_date" ? (
               <input
                 type="date"

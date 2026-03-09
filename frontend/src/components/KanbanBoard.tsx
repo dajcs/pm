@@ -24,12 +24,14 @@ const collisionDetection: CollisionDetection = (args) => {
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { BoardSelector } from "@/components/BoardSelector";
+import { AccountModal } from "@/components/AccountModal";
 import { moveCard, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
 
 interface KanbanBoardProps {
   onLogout?: () => void;
+  username?: string;
   /** Supply initial board data (used in tests to skip API fetch). */
   initialBoard?: BoardData;
   /** Board data from an external update (e.g. AI mutation). Applied in-place. */
@@ -48,6 +50,7 @@ interface KanbanBoardProps {
 
 export const KanbanBoard = ({
   onLogout,
+  username,
   initialBoard,
   pendingBoard,
   onPendingBoardApplied,
@@ -67,6 +70,8 @@ export const KanbanBoard = ({
   const [newColumnTitle, setNewColumnTitle] = useState("");
   const [filterPriority, setFilterPriority] = useState<string | null>(null);
   const [filterOverdue, setFilterOverdue] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showAccount, setShowAccount] = useState(false);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const showError = useCallback((msg: string) => {
@@ -277,6 +282,23 @@ export const KanbanBoard = ({
     });
   };
 
+  const handleUpdateLabels = (cardId: string, labels: string[]) => {
+    if (!board) return;
+    const prev = board;
+    setBoard({ ...board, cards: { ...board.cards, [cardId]: { ...board.cards[cardId], labels } } });
+    api.updateCard(cardId, { labels }, boardId).catch((err) => { setBoard(prev); showError(err.message); });
+  };
+
+  const handleSetWipLimit = (columnId: string, wipLimit: number | null) => {
+    if (!board) return;
+    const prev = board;
+    setBoard({
+      ...board,
+      columns: board.columns.map((c) => c.id === columnId ? { ...c, wip_limit: wipLimit } : c),
+    });
+    api.setColumnWipLimit(columnId, wipLimit, boardId).catch((err) => { setBoard(prev); showError(err.message); });
+  };
+
   const handleAddColumn = () => {
     const title = newColumnTitle.trim();
     if (!title || !board) return;
@@ -330,6 +352,13 @@ export const KanbanBoard = ({
       if (!card.due_date) return false;
       const due = new Date(card.due_date + "T00:00:00");
       if (due >= today) return false;
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = card.title.toLowerCase().includes(q);
+      const matchDetails = card.details.toLowerCase().includes(q);
+      const matchLabels = (card.labels ?? []).some((l) => l.toLowerCase().includes(q));
+      if (!matchTitle && !matchDetails && !matchLabels) return false;
     }
     return true;
   };
@@ -392,17 +421,36 @@ export const KanbanBoard = ({
               ))}
             </div>
           )}
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="shrink-0 rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)] transition-colors hover:text-[var(--navy-dark)]"
-            >
-              Sign out
-            </button>
-          )}
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            {username && (
+              <button
+                onClick={() => setShowAccount(true)}
+                className="rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--navy-dark)] hover:border-[var(--primary-blue)] transition-colors"
+                title="Account settings"
+              >
+                {username}
+              </button>
+            )}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)] transition-colors hover:text-[var(--navy-dark)]"
+              >
+                Sign out
+              </button>
+            )}
+          </div>
         </header>
 
-        <div className="flex flex-wrap items-center gap-2 px-1">
+        <div className="flex flex-wrap items-center gap-3 px-1">
+          <input
+            type="search"
+            placeholder="Search cards..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="rounded-xl border border-[var(--stroke)] bg-white px-3 py-1.5 text-xs text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)] w-40"
+            aria-label="Search cards"
+          />
           <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--gray-text)]">Filter:</span>
           {["none", "low", "medium", "high", "urgent"].map((p) => (
             <button
@@ -427,9 +475,9 @@ export const KanbanBoard = ({
           >
             overdue
           </button>
-          {(filterPriority || filterOverdue) && (
+          {(filterPriority || filterOverdue || searchQuery) && (
             <button
-              onClick={() => { setFilterPriority(null); setFilterOverdue(false); }}
+              onClick={() => { setFilterPriority(null); setFilterOverdue(false); setSearchQuery(""); }}
               className="text-xs text-[var(--gray-text)] hover:text-[var(--navy-dark)] underline"
             >
               clear
@@ -462,6 +510,8 @@ export const KanbanBoard = ({
                   onDeleteColumn={handleDeleteColumn}
                   onUpdatePriority={handleUpdatePriority}
                   onUpdateDueDate={handleUpdateDueDate}
+                  onUpdateLabels={handleUpdateLabels}
+                  onSetWipLimit={handleSetWipLimit}
                 />
               ))}
               {/* Add column slot */}
@@ -529,6 +579,9 @@ export const KanbanBoard = ({
           </div>
         )}
       </main>
+      {showAccount && username && (
+        <AccountModal username={username} onClose={() => setShowAccount(false)} />
+      )}
     </div>
   );
 };

@@ -76,6 +76,8 @@ async def init_db() -> None:
             "ALTER TABLE cards ADD COLUMN due_date TEXT",
             "ALTER TABLE cards ADD COLUMN priority TEXT NOT NULL DEFAULT 'none'",
             "ALTER TABLE boards ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE cards ADD COLUMN labels TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE columns ADD COLUMN wip_limit INTEGER",
         ]:
             try:
                 await db.execute(migration_sql)
@@ -146,12 +148,14 @@ async def load_board(board_id: int) -> dict:
     """Load full board data as {columns: [...], cards: {...}} in two queries."""
     db = await get_db()
     try:
+        import json as _json
         cols = await db.execute_fetchall(
-            "SELECT id, title FROM columns WHERE board_id = ? ORDER BY position",
+            "SELECT id, title, wip_limit FROM columns WHERE board_id = ? ORDER BY position",
             (board_id,),
         )
         card_rows = await db.execute_fetchall(
-            """SELECT cards.id, cards.column_id, cards.title, cards.details, cards.due_date, cards.priority
+            """SELECT cards.id, cards.column_id, cards.title, cards.details,
+                      cards.due_date, cards.priority, cards.labels
                FROM cards
                JOIN columns ON cards.column_id = columns.id
                WHERE columns.board_id = ?
@@ -169,11 +173,17 @@ async def load_board(board_id: int) -> dict:
                 "details": card["details"],
                 "due_date": card["due_date"],
                 "priority": card["priority"] or "none",
+                "labels": _json.loads(card["labels"] or "[]"),
             }
             if col_id in cards_by_col:
                 cards_by_col[col_id].append(card_id)
         columns = [
-            {"id": col["id"], "title": col["title"], "cardIds": cards_by_col[col["id"]]}
+            {
+                "id": col["id"],
+                "title": col["title"],
+                "cardIds": cards_by_col[col["id"]],
+                "wip_limit": col["wip_limit"],
+            }
             for col in cols
         ]
         return {"columns": columns, "cards": cards}
@@ -185,23 +195,25 @@ async def save_board(board_id: int, data: dict) -> None:
     """Replace the entire board content (columns + cards) with the provided data."""
     db = await get_db()
     try:
+        import json as _json
         await db.execute("DELETE FROM columns WHERE board_id = ?", (board_id,))
         for position, col in enumerate(data["columns"]):
             await db.execute(
-                "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
-                (col["id"], board_id, col["title"], position),
+                "INSERT INTO columns (id, board_id, title, position, wip_limit) VALUES (?, ?, ?, ?, ?)",
+                (col["id"], board_id, col["title"], position, col.get("wip_limit")),
             )
             for card_pos, card_id in enumerate(col.get("cardIds", [])):
                 card = data["cards"].get(card_id)
                 if card:
                     await db.execute(
-                        "INSERT INTO cards (id, column_id, title, details, position, due_date, priority) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO cards (id, column_id, title, details, position, due_date, priority, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             card["id"], col["id"], card["title"],
                             card.get("details", "No details yet."),
                             card_pos,
                             card.get("due_date"),
                             card.get("priority", "none"),
+                            _json.dumps(card.get("labels", [])),
                         ),
                     )
         await db.commit()
@@ -228,10 +240,11 @@ async def create_card(board_id: int, column_id: str, title: str, details: str, d
         )
         row = await cursor.fetchone()
         position = row["next_pos"]
+        import json as _json
         card_id = f"card-{uuid.uuid4().hex[:8]}"
         await db.execute(
-            "INSERT INTO cards (id, column_id, title, details, position, due_date, priority) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (card_id, column_id, title, details, position, due_date, priority),
+            "INSERT INTO cards (id, column_id, title, details, position, due_date, priority, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (card_id, column_id, title, details, position, due_date, priority, "[]"),
         )
         await db.commit()
         return card_id
@@ -266,6 +279,8 @@ async def update_card(card_id: str, board_id: int, updates: dict) -> bool:
         )
         if not await cursor.fetchone():
             return False
+        import json as _json
+        import json as _json
         field_map = {
             "title": "title",
             "details": "details",
@@ -277,6 +292,9 @@ async def update_card(card_id: str, board_id: int, updates: dict) -> bool:
             if key in updates:
                 fields.append(f"{col} = ?")
                 values.append(updates[key])
+        if "labels" in updates:
+            fields.append("labels = ?")
+            values.append(_json.dumps(updates["labels"] or []))
         if not fields:
             return True  # card found, nothing to update
         values.append(card_id)
@@ -479,6 +497,20 @@ async def update_board_description(board_id: int, user_id: int, description: str
         cursor = await db.execute(
             "UPDATE boards SET description = ? WHERE id = ? AND user_id = ?",
             (description, board_id, user_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def set_column_wip_limit(column_id: str, board_id: int, wip_limit: int | None) -> bool:
+    """Set (or clear) WIP limit for a column. Returns True if updated."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "UPDATE columns SET wip_limit = ? WHERE id = ? AND board_id = ?",
+            (wip_limit, column_id, board_id),
         )
         await db.commit()
         return cursor.rowcount > 0

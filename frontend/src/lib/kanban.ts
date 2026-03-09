@@ -4,12 +4,14 @@ export type Card = {
   details: string;
   due_date?: string | null;
   priority?: string;
+  labels?: string[];
 };
 
 export type Column = {
   id: string;
   title: string;
   cardIds: string[];
+  wip_limit?: number | null;
 };
 
 export type BoardData = {

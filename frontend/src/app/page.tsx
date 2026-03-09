@@ -11,8 +11,18 @@ import type { BoardData } from "@/lib/kanban";
 
 type AuthScreen = "login" | "register";
 
+function decodeUsername(jwt: string): string {
+  try {
+    const payload = JSON.parse(atob(jwt.split(".")[1]));
+    return payload.sub ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
+  const [username, setUsername] = useState("");
   const [checking, setChecking] = useState(true);
   const [authScreen, setAuthScreen] = useState<AuthScreen>("login");
   const [pendingBoard, setPendingBoard] = useState<BoardData | null>(null);
@@ -22,6 +32,7 @@ export default function Home() {
   const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
     setToken(null);
+    setUsername("");
     setBoards([]);
     setCurrentBoardId(undefined);
   }, []);
@@ -41,8 +52,12 @@ export default function Home() {
       headers: { Authorization: `Bearer ${stored}` },
     })
       .then((res) => {
-        if (res.ok) setToken(stored);
-        else localStorage.removeItem("token");
+        if (res.ok) {
+          setToken(stored);
+          setUsername(decodeUsername(stored));
+        } else {
+          localStorage.removeItem("token");
+        }
       })
       .catch(() => localStorage.removeItem("token"))
       .finally(() => setChecking(false));
@@ -69,6 +84,7 @@ export default function Home() {
   const handleLogin = useCallback((jwt: string) => {
     localStorage.setItem("token", jwt);
     setToken(jwt);
+    setUsername(decodeUsername(jwt));
   }, []);
 
   const handleBoardUpdated = useCallback((board: BoardData) => {
@@ -140,6 +156,7 @@ export default function Home() {
       <div className="min-w-0 flex-1 overflow-auto">
         <KanbanBoard
           onLogout={handleLogout}
+          username={username}
           pendingBoard={pendingBoard}
           onPendingBoardApplied={handlePendingBoardApplied}
           boardId={currentBoardId}

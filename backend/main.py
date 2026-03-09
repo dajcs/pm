@@ -33,6 +33,7 @@ from database import (
     rename_board,
     rename_column,
     save_board,
+    set_column_wip_limit,
     update_board_description,
     update_card,
     update_user_password,
@@ -50,6 +51,7 @@ from models import (
     RegisterRequest,
     RenameBoardRequest,
     RenameColumnRequest,
+    SetWipLimitRequest,
     UpdateBoardDescriptionRequest,
     UpdateCardRequest,
 )
@@ -307,6 +309,15 @@ async def add_column_endpoint(
 ):
     col_id = await add_column(board_id, body.title)
     return {"id": col_id, "title": body.title}
+
+
+@app.put("/api/board/columns/{column_id}/wip-limit")
+async def set_wip_limit_endpoint(
+    column_id: str, body: SetWipLimitRequest, board_id: int = Depends(get_board_id)
+):
+    if not await set_column_wip_limit(column_id, board_id, body.wip_limit):
+        raise HTTPException(status_code=404, detail="Column not found")
+    return {"ok": True}
 
 
 @app.delete("/api/board/columns/{column_id}")

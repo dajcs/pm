@@ -78,7 +78,7 @@ export async function deleteCard(cardId: string, boardId?: number): Promise<void
 
 export async function updateCard(
   cardId: string,
-  fields: { title?: string; details?: string; due_date?: string | null; priority?: string },
+  fields: { title?: string; details?: string; due_date?: string | null; priority?: string; labels?: string[] },
   boardId?: number
 ): Promise<void> {
   await request(`/api/board/cards/${cardId}${boardParam(boardId)}`, {
@@ -95,6 +95,17 @@ export async function renameColumn(
   await request(`/api/board/columns/${columnId}${boardParam(boardId)}`, {
     method: "PATCH",
     body: JSON.stringify({ title }),
+  });
+}
+
+export async function setColumnWipLimit(
+  columnId: string,
+  wipLimit: number | null,
+  boardId?: number
+): Promise<void> {
+  await request(`/api/board/columns/${columnId}/wip-limit${boardParam(boardId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ wip_limit: wipLimit }),
   });
 }
 

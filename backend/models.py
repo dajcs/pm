@@ -12,12 +12,14 @@ class Card(BaseModel):
     details: str = Field(default="No details yet.", max_length=4000)
     due_date: str | None = None
     priority: str = "none"
+    labels: list[str] = []
 
 
 class Column(BaseModel):
     id: str
     title: str = Field(max_length=200)
     cardIds: list[str] = []
+    wip_limit: int | None = None
 
 
 class BoardData(BaseModel):
@@ -38,6 +40,11 @@ class UpdateCardRequest(BaseModel):
     details: str | None = Field(default=None, max_length=4000)
     due_date: str | None = None
     priority: str | None = None
+    labels: list[str] | None = None
+
+
+class SetWipLimitRequest(BaseModel):
+    wip_limit: int | None = None  # None clears the limit
 
 
 class BoardStatsResponse(BaseModel):

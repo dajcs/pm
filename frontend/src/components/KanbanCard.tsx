@@ -3,14 +3,17 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import type { Card } from "@/lib/kanban";
+import { ChecklistPanel } from "@/components/ChecklistPanel";
 
 type KanbanCardProps = {
   card: Card;
+  boardId?: number;
   onDelete: (cardId: string) => void;
   onEdit: (cardId: string, title: string, details: string) => void;
   onUpdatePriority?: (cardId: string, priority: string) => void;
   onUpdateDueDate?: (cardId: string, dueDate: string | null) => void;
   onUpdateLabels?: (cardId: string, labels: string[]) => void;
+  onChecklistCountChange?: (cardId: string, total: number, done: number) => void;
 };
 
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
@@ -44,9 +47,10 @@ function getDueDateStyle(dueDate: string | null | undefined): string {
   return "text-[var(--gray-text)]";
 }
 
-export const KanbanCard = ({ card, onDelete, onEdit, onUpdatePriority, onUpdateDueDate, onUpdateLabels }: KanbanCardProps) => {
+export const KanbanCard = ({ card, boardId, onDelete, onEdit, onUpdatePriority, onUpdateDueDate, onUpdateLabels, onChecklistCountChange }: KanbanCardProps) => {
   const [editingField, setEditingField] = useState<"title" | "details" | "due_date" | null>(null);
   const [showLabels, setShowLabels] = useState(false);
+  const [showChecklist, setShowChecklist] = useState(false);
   const [editTitle, setEditTitle] = useState(card.title);
   const [editDetails, setEditDetails] = useState(card.details);
   const [editDueDate, setEditDueDate] = useState(card.due_date ?? "");
@@ -236,6 +240,17 @@ export const KanbanCard = ({ card, onDelete, onEdit, onUpdatePriority, onUpdateD
                 tag
               </button>
             )}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setShowChecklist((v) => !v); }}
+              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${showChecklist ? "border-[var(--primary-blue)] text-[var(--primary-blue)]" : "border-[var(--stroke)] text-[var(--gray-text)] hover:border-[var(--primary-blue)]"}`}
+              aria-label="Toggle checklist"
+              title="Checklist"
+            >
+              {(card.checklist_total ?? 0) > 0
+                ? `${card.checklist_done ?? 0}/${card.checklist_total}`
+                : "list"}
+            </button>
             {editingField === "due_date" ? (
               <input
                 type="date"
@@ -266,6 +281,13 @@ export const KanbanCard = ({ card, onDelete, onEdit, onUpdatePriority, onUpdateD
           </div>
         </div>
       </div>
+      {showChecklist && (
+        <ChecklistPanel
+          cardId={card.id}
+          boardId={boardId}
+          onCountChange={(total, done) => onChecklistCountChange?.(card.id, total, done)}
+        />
+      )}
     </article>
   );
 };

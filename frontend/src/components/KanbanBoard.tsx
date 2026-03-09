@@ -25,7 +25,7 @@ import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { BoardSelector } from "@/components/BoardSelector";
 import { AccountModal } from "@/components/AccountModal";
-import { moveCard, type BoardData, type Card } from "@/lib/kanban";
+import { moveCard, moveColumn, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
 
@@ -151,11 +151,11 @@ export const KanbanBoard = ({
 
       if (!over || active.id === over.id || !board) return;
 
-      const newColumns = moveCard(
-        board.columns,
-        active.id as string,
-        over.id as string
-      );
+      const activeIsColumn = board.columns.some((c) => c.id === active.id);
+      const newColumns = activeIsColumn
+        ? moveColumn(board.columns, active.id as string, over.id as string)
+        : moveCard(board.columns, active.id as string, over.id as string);
+
       const updated = { ...board, columns: newColumns };
       setBoard(updated);
 
@@ -287,6 +287,15 @@ export const KanbanBoard = ({
     const prev = board;
     setBoard({ ...board, cards: { ...board.cards, [cardId]: { ...board.cards[cardId], labels } } });
     api.updateCard(cardId, { labels }, boardId).catch((err) => { setBoard(prev); showError(err.message); });
+  };
+
+  const handleChecklistCountChange = (cardId: string, total: number, done: number) => {
+    setBoard((prev) => {
+      if (!prev) return prev;
+      const card = prev.cards[cardId];
+      if (!card) return prev;
+      return { ...prev, cards: { ...prev.cards, [cardId]: { ...card, checklist_total: total, checklist_done: done } } };
+    });
   };
 
   const handleSetWipLimit = (columnId: string, wipLimit: number | null) => {
@@ -507,11 +516,13 @@ export const KanbanBoard = ({
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}
                   onEditCard={handleEditCard}
+                  boardId={boardId}
                   onDeleteColumn={handleDeleteColumn}
                   onUpdatePriority={handleUpdatePriority}
                   onUpdateDueDate={handleUpdateDueDate}
                   onUpdateLabels={handleUpdateLabels}
                   onSetWipLimit={handleSetWipLimit}
+                  onChecklistCountChange={handleChecklistCountChange}
                 />
               ))}
               {/* Add column slot */}

@@ -69,6 +69,14 @@ async def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_boards_user_id ON boards(user_id);
             CREATE INDEX IF NOT EXISTS idx_columns_board_id ON columns(board_id);
             CREATE INDEX IF NOT EXISTS idx_cards_column_id ON cards(column_id);
+            CREATE TABLE IF NOT EXISTS checklist_items (
+                id INTEGER PRIMARY KEY,
+                card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                text TEXT NOT NULL,
+                checked INTEGER NOT NULL DEFAULT 0,
+                position INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_checklist_card_id ON checklist_items(card_id);
         """)
 
         # Migrations: add new columns if they don't exist
@@ -162,11 +170,28 @@ async def load_board(board_id: int) -> dict:
                ORDER BY columns.position, cards.position""",
             (board_id,),
         )
+        # Load checklist summaries for all cards on this board in one query
+        checklist_rows = await db.execute_fetchall(
+            """SELECT ci.card_id,
+                      COUNT(*) as total,
+                      SUM(ci.checked) as done
+               FROM checklist_items ci
+               JOIN cards c ON ci.card_id = c.id
+               JOIN columns col ON c.column_id = col.id
+               WHERE col.board_id = ?
+               GROUP BY ci.card_id""",
+            (board_id,),
+        )
+        checklist_summary: dict[str, dict] = {
+            r["card_id"]: {"total": r["total"], "done": int(r["done"] or 0)}
+            for r in checklist_rows
+        }
         cards_by_col: dict[str, list[str]] = {col["id"]: [] for col in cols}
         cards: dict = {}
         for card in card_rows:
             card_id = card["id"]
             col_id = card["column_id"]
+            summary = checklist_summary.get(card_id, {"total": 0, "done": 0})
             cards[card_id] = {
                 "id": card_id,
                 "title": card["title"],
@@ -174,6 +199,8 @@ async def load_board(board_id: int) -> dict:
                 "due_date": card["due_date"],
                 "priority": card["priority"] or "none",
                 "labels": _json.loads(card["labels"] or "[]"),
+                "checklist_total": summary["total"],
+                "checklist_done": summary["done"],
             }
             if col_id in cards_by_col:
                 cards_by_col[col_id].append(card_id)
@@ -511,6 +538,96 @@ async def set_column_wip_limit(column_id: str, board_id: int, wip_limit: int | N
         cursor = await db.execute(
             "UPDATE columns SET wip_limit = ? WHERE id = ? AND board_id = ?",
             (wip_limit, column_id, board_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def _card_belongs_to_board(db: aiosqlite.Connection, card_id: str, board_id: int) -> bool:
+    cursor = await db.execute(
+        """SELECT 1 FROM cards JOIN columns ON cards.column_id = columns.id
+           WHERE cards.id = ? AND columns.board_id = ?""",
+        (card_id, board_id),
+    )
+    return await cursor.fetchone() is not None
+
+
+async def get_checklist(card_id: str, board_id: int) -> list[dict] | None:
+    """Return checklist items for a card, or None if card not found on board."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return None
+        rows = await db.execute_fetchall(
+            "SELECT id, text, checked FROM checklist_items WHERE card_id = ? ORDER BY position",
+            (card_id,),
+        )
+        return [{"id": r["id"], "text": r["text"], "checked": bool(r["checked"])} for r in rows]
+    finally:
+        await db.close()
+
+
+async def add_checklist_item(card_id: str, board_id: int, text: str) -> int | None:
+    """Add item to card's checklist. Returns item id or None if card not found."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return None
+        cursor = await db.execute(
+            "SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM checklist_items WHERE card_id = ?",
+            (card_id,),
+        )
+        row = await cursor.fetchone()
+        cursor = await db.execute(
+            "INSERT INTO checklist_items (card_id, text, checked, position) VALUES (?, ?, 0, ?)",
+            (card_id, text, row["next_pos"]),
+        )
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def update_checklist_item(
+    item_id: int, card_id: str, board_id: int,
+    text: str | None, checked: bool | None
+) -> bool:
+    """Update text/checked on a checklist item. Returns True if updated."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return False
+        fields, values = [], []
+        if text is not None:
+            fields.append("text = ?")
+            values.append(text)
+        if checked is not None:
+            fields.append("checked = ?")
+            values.append(1 if checked else 0)
+        if not fields:
+            return True
+        values.extend([item_id, card_id])
+        cursor = await db.execute(
+            f"UPDATE checklist_items SET {', '.join(fields)} WHERE id = ? AND card_id = ?",
+            values,
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def delete_checklist_item(item_id: int, card_id: str, board_id: int) -> bool:
+    """Delete a checklist item. Returns True if deleted."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return False
+        cursor = await db.execute(
+            "DELETE FROM checklist_items WHERE id = ? AND card_id = ?",
+            (item_id, card_id),
         )
         await db.commit()
         return cursor.rowcount > 0

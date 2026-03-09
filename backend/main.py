@@ -16,15 +16,18 @@ from slowapi.util import get_remote_address
 from ai import chat_with_board
 from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
 from database import (
+    add_checklist_item,
     add_column,
     create_board,
     create_card,
     create_user,
     delete_board,
     delete_card,
+    delete_checklist_item,
     delete_column,
     get_board_by_id,
     get_board_stats,
+    get_checklist,
     get_or_create_board,
     get_user_by_username,
     init_db,
@@ -36,10 +39,12 @@ from database import (
     set_column_wip_limit,
     update_board_description,
     update_card,
+    update_checklist_item,
     update_user_password,
     verify_password,
 )
 from models import (
+    AddChecklistItemRequest,
     BoardData,
     BoardStatsResponse,
     ChangePasswordRequest,
@@ -54,6 +59,7 @@ from models import (
     SetWipLimitRequest,
     UpdateBoardDescriptionRequest,
     UpdateCardRequest,
+    UpdateChecklistItemRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -288,6 +294,46 @@ async def patch_card(
         updates.pop("details")
     if not await update_card(card_id, board_id, updates):
         raise HTTPException(status_code=404, detail="Card not found")
+    return {"ok": True}
+
+
+# --- Checklists ---
+
+
+@app.get("/api/board/cards/{card_id}/checklist")
+async def get_checklist_endpoint(card_id: str, board_id: int = Depends(get_board_id)):
+    items = await get_checklist(card_id, board_id)
+    if items is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return items
+
+
+@app.post("/api/board/cards/{card_id}/checklist", status_code=201)
+async def add_checklist_item_endpoint(
+    card_id: str, body: AddChecklistItemRequest, board_id: int = Depends(get_board_id)
+):
+    item_id = await add_checklist_item(card_id, board_id, body.text)
+    if item_id is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return {"id": item_id, "text": body.text, "checked": False}
+
+
+@app.patch("/api/board/cards/{card_id}/checklist/{item_id}")
+async def update_checklist_item_endpoint(
+    card_id: str, item_id: int, body: UpdateChecklistItemRequest,
+    board_id: int = Depends(get_board_id)
+):
+    if not await update_checklist_item(item_id, card_id, board_id, body.text, body.checked):
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+    return {"ok": True}
+
+
+@app.delete("/api/board/cards/{card_id}/checklist/{item_id}")
+async def delete_checklist_item_endpoint(
+    card_id: str, item_id: int, board_id: int = Depends(get_board_id)
+):
+    if not await delete_checklist_item(item_id, card_id, board_id):
+        raise HTTPException(status_code=404, detail="Checklist item not found")
     return {"ok": True}
 
 

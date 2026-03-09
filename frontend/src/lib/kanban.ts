@@ -1,3 +1,9 @@
+export type ChecklistItem = {
+  id: number;
+  text: string;
+  checked: boolean;
+};
+
 export type Card = {
   id: string;
   title: string;
@@ -5,6 +11,8 @@ export type Card = {
   due_date?: string | null;
   priority?: string;
   labels?: string[];
+  checklist_total?: number;
+  checklist_done?: number;
 };
 
 export type Column = {
@@ -24,6 +32,16 @@ export type Board = {
   name: string;
   created_at: string;
   description?: string;
+};
+
+export const moveColumn = (columns: Column[], activeId: string, overId: string): Column[] => {
+  const oldIdx = columns.findIndex((c) => c.id === activeId);
+  const newIdx = columns.findIndex((c) => c.id === overId);
+  if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return columns;
+  const next = [...columns];
+  const [moved] = next.splice(oldIdx, 1);
+  next.splice(newIdx, 0, moved);
+  return next;
 };
 
 const isColumnId = (columns: Column[], id: string) =>

@@ -13,6 +13,23 @@ class Card(BaseModel):
     due_date: str | None = None
     priority: str = "none"
     labels: list[str] = []
+    checklist_total: int = 0
+    checklist_done: int = 0
+
+
+class ChecklistItem(BaseModel):
+    id: int
+    text: str
+    checked: bool
+
+
+class AddChecklistItemRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+
+
+class UpdateChecklistItemRequest(BaseModel):
+    text: str | None = Field(default=None, max_length=500)
+    checked: bool | None = None
 
 
 class Column(BaseModel):

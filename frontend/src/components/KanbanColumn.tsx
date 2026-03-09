@@ -9,6 +9,7 @@ import { NewCardForm } from "@/components/NewCardForm";
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
+  boardId?: number;
   isHighlighted?: boolean;
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
@@ -19,11 +20,13 @@ type KanbanColumnProps = {
   onUpdateDueDate?: (cardId: string, dueDate: string | null) => void;
   onUpdateLabels?: (cardId: string, labels: string[]) => void;
   onSetWipLimit?: (columnId: string, wipLimit: number | null) => void;
+  onChecklistCountChange?: (cardId: string, total: number, done: number) => void;
 };
 
 export const KanbanColumn = ({
   column,
   cards,
+  boardId,
   isHighlighted,
   onRename,
   onAddCard,
@@ -34,6 +37,7 @@ export const KanbanColumn = ({
   onUpdateDueDate,
   onUpdateLabels,
   onSetWipLimit,
+  onChecklistCountChange,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
@@ -142,9 +146,11 @@ export const KanbanColumn = ({
               card={card}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
               onEdit={onEditCard}
+              boardId={boardId}
               onUpdatePriority={onUpdatePriority}
               onUpdateDueDate={onUpdateDueDate}
               onUpdateLabels={onUpdateLabels}
+              onChecklistCountChange={onChecklistCountChange}
             />
           ))}
         </SortableContext>

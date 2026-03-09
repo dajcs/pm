@@ -1,4 +1,4 @@
-import type { BoardData } from "./kanban";
+import type { BoardData, ChecklistItem } from "./kanban";
 
 export interface Board {
   id: number;
@@ -168,6 +168,40 @@ export async function updateBoardDescription(boardId: number, description: strin
   await request(`/api/boards/${boardId}/description`, {
     method: "PATCH",
     body: JSON.stringify({ description }),
+  });
+}
+
+// --- Checklist ---
+
+export async function getChecklist(cardId: string, boardId?: number): Promise<ChecklistItem[]> {
+  return request<ChecklistItem[]>(`/api/board/cards/${cardId}/checklist${boardParam(boardId)}`);
+}
+
+export async function addChecklistItem(
+  cardId: string, text: string, boardId?: number
+): Promise<ChecklistItem> {
+  return request<ChecklistItem>(`/api/board/cards/${cardId}/checklist${boardParam(boardId)}`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function updateChecklistItem(
+  cardId: string, itemId: number,
+  fields: { text?: string; checked?: boolean },
+  boardId?: number
+): Promise<void> {
+  await request(`/api/board/cards/${cardId}/checklist/${itemId}${boardParam(boardId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(fields),
+  });
+}
+
+export async function deleteChecklistItem(
+  cardId: string, itemId: number, boardId?: number
+): Promise<void> {
+  await request(`/api/board/cards/${cardId}/checklist/${itemId}${boardParam(boardId)}`, {
+    method: "DELETE",
   });
 }
 

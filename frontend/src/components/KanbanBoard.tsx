@@ -255,52 +255,34 @@ export const KanbanBoard = ({
       <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
 
-      <main className="relative mx-auto flex min-h-screen flex-col gap-10 px-6 pb-16 pt-12">
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
-              </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                Kanban Studio
-              </h1>
-              <div className="mt-2 h-1 w-16 rounded-full bg-[var(--accent-yellow)]" />
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                  Focus
-                </p>
-                <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                  One board. Five columns. Zero clutter.
-                </p>
-              </div>
-              {onLogout && (
-                <button
-                  onClick={onLogout}
-                  className="rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)] transition-colors hover:text-[var(--navy-dark)]"
-                >
-                  Sign out
-                </button>
-              )}
-            </div>
+      <main className="relative flex min-h-screen flex-col gap-5 px-5 pb-8 pt-5">
+        <header className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--stroke)] bg-white/80 px-5 py-3 shadow-[var(--shadow)] backdrop-blur">
+          <div className="flex items-center gap-3">
+            <h1 className="font-display text-lg font-semibold text-[var(--navy-dark)]">
+              Kanban Studio
+            </h1>
+            <div className="h-1 w-8 rounded-full bg-[var(--accent-yellow)]" />
           </div>
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="mx-1 h-5 w-px bg-[var(--stroke)]" />
+          <div className="flex flex-1 flex-wrap items-center gap-2">
             {board.columns.map((column) => (
               <div
                 key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
+                className="flex items-center gap-1.5 rounded-full border border-[var(--stroke)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--navy-dark)]"
               >
-                <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent-yellow)]" />
+                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
                 {column.title}
               </div>
             ))}
           </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="shrink-0 rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)] transition-colors hover:text-[var(--navy-dark)]"
+            >
+              Sign out
+            </button>
+          )}
         </header>
 
         <DndContext
@@ -310,19 +292,24 @@ export const KanbanBoard = ({
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <section className="grid gap-6 lg:grid-cols-5">
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((id) => board.cards[id]).filter((c): c is Card => c !== undefined)}
-                isHighlighted={overColumnId === column.id}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-                onEditCard={handleEditCard}
-              />
-            ))}
+          <section className="overflow-x-auto">
+            <div
+              className="grid gap-4"
+              style={{ gridTemplateColumns: `repeat(${board.columns.length}, minmax(190px, 1fr))` }}
+            >
+              {board.columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  cards={column.cardIds.map((id) => board.cards[id]).filter((c): c is Card => c !== undefined)}
+                  isHighlighted={overColumnId === column.id}
+                  onRename={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
+                  onEditCard={handleEditCard}
+                />
+              ))}
+            </div>
           </section>
           <DragOverlay>
             {activeCard ? (

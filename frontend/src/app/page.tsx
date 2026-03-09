@@ -58,7 +58,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen">
-      <div className="flex-1 overflow-auto">
+      <div className="min-w-0 flex-1 overflow-auto">
         <KanbanBoard
           onLogout={handleLogout}
           pendingBoard={pendingBoard}

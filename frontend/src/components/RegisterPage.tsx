@@ -1,39 +1,35 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import * as api from "@/lib/api";
 
-interface LoginPageProps {
-  onLogin: (token: string) => void;
-  onRegister?: () => void;
+interface RegisterPageProps {
+  onRegister: (jwt: string) => void;
+  onBackToLogin: () => void;
 }
 
-export const LoginPage = ({ onLogin, onRegister }: LoginPageProps) => {
+export const RegisterPage = ({ onRegister, onBackToLogin }: RegisterPageProps) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setError(null);
+
+    if (password !== confirm) {
+      setError("Passwords do not match");
+      return;
+    }
+
     setLoading(true);
-
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!res.ok) {
-        setError("Invalid username or password");
-        return;
-      }
-
-      const data = await res.json();
-      onLogin(data.token);
-    } catch {
-      setError("Unable to reach the server");
+      const { token } = await api.register(username, password);
+      onRegister(token);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -50,7 +46,7 @@ export const LoginPage = ({ onLogin, onRegister }: LoginPageProps) => {
       >
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-            Welcome back
+            New account
           </p>
           <h1 className="mt-3 font-display text-3xl font-semibold text-[var(--navy-dark)]">
             Kanban Studio
@@ -67,8 +63,10 @@ export const LoginPage = ({ onLogin, onRegister }: LoginPageProps) => {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
+            minLength={3}
             autoFocus
             className="rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)]"
+            placeholder="at least 3 characters"
           />
         </label>
 
@@ -80,6 +78,21 @@ export const LoginPage = ({ onLogin, onRegister }: LoginPageProps) => {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={6}
+            className="rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)]"
+            placeholder="at least 6 characters"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+            Confirm Password
+          </span>
+          <input
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
             required
             className="rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)]"
           />
@@ -96,21 +109,19 @@ export const LoginPage = ({ onLogin, onRegister }: LoginPageProps) => {
           disabled={loading}
           className="mt-1 rounded-xl bg-[var(--secondary-purple)] px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {loading ? "Signing in..." : "Sign in"}
+          {loading ? "Creating..." : "Create Account"}
         </button>
 
-        {onRegister && (
-          <p className="text-center text-sm text-[var(--gray-text)]">
-            No account yet?{" "}
-            <button
-              type="button"
-              onClick={onRegister}
-              className="font-semibold text-[var(--primary-blue)] hover:underline"
-            >
-              Create one
-            </button>
-          </p>
-        )}
+        <p className="text-center text-sm text-[var(--gray-text)]">
+          Already have an account?{" "}
+          <button
+            type="button"
+            onClick={onBackToLogin}
+            className="font-semibold text-[var(--primary-blue)] hover:underline"
+          >
+            Sign in
+          </button>
+        </p>
       </form>
     </div>
   );

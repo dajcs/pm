@@ -8,9 +8,11 @@ import type { BoardData } from "@/lib/kanban";
 interface ChatSidebarProps {
   /** Called with the new board data when the AI mutates the board. */
   onBoardUpdated?: (board: BoardData) => void;
+  /** Current board id to pass with AI requests. */
+  boardId?: number;
 }
 
-export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
+export const ChatSidebar = ({ onBoardUpdated, boardId }: ChatSidebarProps) => {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -34,7 +36,7 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
           role: m.role,
           content: m.content,
         }));
-        const result = await api.sendChatMessage(userMessage, apiHistory);
+        const result = await api.sendChatMessage(userMessage, apiHistory, boardId);
 
         const assistantMsg: ChatMsg = {
           id: crypto.randomUUID(),
@@ -57,7 +59,7 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
         setSending(false);
       }
     },
-    [onBoardUpdated]
+    [onBoardUpdated, boardId]
   );
 
   const handleSend = useCallback(() => {

@@ -12,6 +12,8 @@ vi.mock("@/lib/api", () => ({
   updateCard: vi.fn(),
   renameColumn: vi.fn(),
   saveColumnsOrder: vi.fn(),
+  addColumn: vi.fn(),
+  deleteColumn: vi.fn(),
   setAuthErrorHandler: vi.fn(),
 }));
 
@@ -39,7 +41,7 @@ describe("KanbanBoard", () => {
     await userEvent.type(input, "New Name");
     await userEvent.tab(); // blur to commit
     await waitFor(() =>
-      expect(api.renameColumn).toHaveBeenCalledWith("col-backlog", "New Name")
+      expect(api.renameColumn).toHaveBeenCalledWith("col-backlog", "New Name", undefined)
     );
     expect(input).toHaveValue("New Name");
   });

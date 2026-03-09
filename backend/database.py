@@ -270,3 +270,155 @@ async def rename_column(column_id: str, board_id: int, title: str) -> bool:
         return cursor.rowcount > 0
     finally:
         await db.close()
+
+
+async def list_boards(user_id: int) -> list[dict]:
+    db = await get_db()
+    try:
+        rows = await db.execute_fetchall(
+            "SELECT id, name, created_at FROM boards WHERE user_id = ? ORDER BY created_at",
+            (user_id,),
+        )
+        return [{"id": r["id"], "name": r["name"], "created_at": r["created_at"]} for r in rows]
+    finally:
+        await db.close()
+
+
+async def create_board(user_id: int, name: str) -> int:
+    """Create a new board with default columns. Returns board_id."""
+    db = await get_db()
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = await db.execute(
+            "INSERT INTO boards (user_id, name, created_at) VALUES (?, ?, ?)",
+            (user_id, name, now),
+        )
+        board_id = cursor.lastrowid
+        for _, title, position in DEFAULT_COLUMNS:
+            col_id = f"col-{uuid.uuid4().hex[:8]}"
+            await db.execute(
+                "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
+                (col_id, board_id, title, position),
+            )
+        await db.commit()
+        return board_id
+    finally:
+        await db.close()
+
+
+async def get_board_by_id(board_id: int, user_id: int) -> int | None:
+    """Return board_id if it exists and belongs to user_id, else None."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id FROM boards WHERE id = ? AND user_id = ?",
+            (board_id, user_id),
+        )
+        row = await cursor.fetchone()
+        return row["id"] if row else None
+    finally:
+        await db.close()
+
+
+async def rename_board(board_id: int, user_id: int, name: str) -> bool:
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "UPDATE boards SET name = ? WHERE id = ? AND user_id = ?",
+            (name, board_id, user_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def delete_board(board_id: int, user_id: int) -> str:
+    """Delete board if owned by user and user has >1 board.
+    Returns 'ok', 'not_found', or 'last_board'."""
+    db = await get_db()
+    try:
+        count_rows = await db.execute_fetchall(
+            "SELECT COUNT(*) as cnt FROM boards WHERE user_id = ?", (user_id,)
+        )
+        if count_rows[0]["cnt"] <= 1:
+            owned = await db.execute(
+                "SELECT id FROM boards WHERE id = ? AND user_id = ?", (board_id, user_id)
+            )
+            if not await owned.fetchone():
+                return "not_found"
+            return "last_board"
+        cursor = await db.execute(
+            "DELETE FROM boards WHERE id = ? AND user_id = ?",
+            (board_id, user_id),
+        )
+        await db.commit()
+        if cursor.rowcount == 0:
+            return "not_found"
+        return "ok"
+    finally:
+        await db.close()
+
+
+async def create_user(username: str, password: str) -> int | None:
+    """Create a new user. Returns user_id or None if username taken."""
+    db = await get_db()
+    try:
+        try:
+            cursor = await db.execute(
+                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                (username, hash_password(password)),
+            )
+            await db.commit()
+            return cursor.lastrowid
+        except Exception:
+            return None
+    finally:
+        await db.close()
+
+
+async def add_column(board_id: int, title: str) -> str:
+    """Add a new column to the board. Returns the new column_id."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM columns WHERE board_id = ?",
+            (board_id,),
+        )
+        row = await cursor.fetchone()
+        position = row["next_pos"]
+        col_id = f"col-{uuid.uuid4().hex[:8]}"
+        await db.execute(
+            "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
+            (col_id, board_id, title, position),
+        )
+        await db.commit()
+        return col_id
+    finally:
+        await db.close()
+
+
+async def delete_column(column_id: str, board_id: int) -> bool:
+    """Delete column if it belongs to board. Returns True if deleted."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "DELETE FROM columns WHERE id = ? AND board_id = ?",
+            (column_id, board_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def update_user_password(user_id: int, new_password: str) -> None:
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (hash_password(new_password), user_id),
+        )
+        await db.commit()
+    finally:
+        await db.close()

@@ -14,6 +14,7 @@ type KanbanColumnProps = {
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
   onEditCard: (cardId: string, title: string, details: string) => void;
+  onDeleteColumn?: (columnId: string) => void;
 };
 
 export const KanbanColumn = ({
@@ -24,6 +25,7 @@ export const KanbanColumn = ({
   onAddCard,
   onDeleteCard,
   onEditCard,
+  onDeleteColumn,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
@@ -58,6 +60,19 @@ export const KanbanColumn = ({
             <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]">
               {cards.length} cards
             </span>
+            {onDeleteColumn && (
+              <button
+                title="Delete column"
+                onClick={() => {
+                  if (confirm(`Delete column "${column.title}" and all its cards?`)) {
+                    onDeleteColumn(column.id);
+                  }
+                }}
+                className="ml-auto text-xs text-[var(--gray-text)] hover:text-red-600 transition-colors"
+              >
+                delete
+              </button>
+            )}
           </div>
           <input
             value={localTitle}

@@ -46,3 +46,25 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(max_length=2000)
     history: list[ChatMessage] = []
+
+
+class CreateBoardRequest(BaseModel):
+    name: str = Field(max_length=200)
+
+
+class RenameBoardRequest(BaseModel):
+    name: str = Field(max_length=200)
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=6, max_length=100)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6, max_length=100)
+
+
+class CreateColumnRequest(BaseModel):
+    title: str = Field(max_length=200)

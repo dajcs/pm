@@ -15,6 +15,12 @@ export type BoardData = {
   cards: Record<string, Card>;
 };
 
+export type Board = {
+  id: number;
+  name: string;
+  created_at: string;
+};
+
 const isColumnId = (columns: Column[], id: string) =>
   columns.some((column) => column.id === id);
 

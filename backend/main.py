@@ -4,7 +4,7 @@ import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -16,21 +16,36 @@ from slowapi.util import get_remote_address
 from ai import chat_with_board
 from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
 from database import (
+    add_column,
+    create_board,
     create_card,
+    create_user,
+    delete_board,
     delete_card,
+    delete_column,
+    get_board_by_id,
     get_or_create_board,
     get_user_by_username,
     init_db,
+    list_boards,
     load_board,
+    rename_board,
     rename_column,
     save_board,
     update_card,
+    update_user_password,
+    verify_password,
 )
 from models import (
     BoardData,
+    ChangePasswordRequest,
     ChatRequest,
+    CreateBoardRequest,
     CreateCardRequest,
+    CreateColumnRequest,
     LoginRequest,
+    RegisterRequest,
+    RenameBoardRequest,
     RenameColumnRequest,
     UpdateCardRequest,
 )
@@ -89,10 +104,18 @@ async def get_current_user(
     return username
 
 
-async def get_board_id(username: str = Depends(get_current_user)) -> int:
+async def get_board_id(
+    board_id: int | None = Query(default=None),
+    username: str = Depends(get_current_user),
+) -> int:
     user = await get_user_by_username(username)
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
+    if board_id is not None:
+        verified = await get_board_by_id(board_id, user["id"])
+        if verified is None:
+            raise HTTPException(status_code=404, detail="Board not found")
+        return board_id
     return await get_or_create_board(user["id"])
 
 
@@ -110,7 +133,8 @@ async def health():
 @app.post("/api/auth/login")
 @_limit("5/minute")
 async def login(request: Request, body: LoginRequest):
-    if body.username != VALID_USERNAME or body.password != VALID_PASSWORD:
+    user = await get_user_by_username(body.username)
+    if user is None or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return {"token": create_token(body.username)}
 
@@ -118,6 +142,75 @@ async def login(request: Request, body: LoginRequest):
 @app.get("/api/auth/me")
 async def me(username: str = Depends(get_current_user)):
     return {"username": username}
+
+
+# --- Registration ---
+
+
+@app.post("/api/auth/register", status_code=201)
+async def register(body: RegisterRequest):
+    user_id = await create_user(body.username, body.password)
+    if user_id is None:
+        raise HTTPException(status_code=409, detail="Username already taken")
+    return {"token": create_token(body.username)}
+
+
+@app.post("/api/auth/change-password")
+async def change_password_endpoint(
+    body: ChangePasswordRequest, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None or not verify_password(body.current_password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid current password")
+    await update_user_password(user["id"], body.new_password)
+    return {"ok": True}
+
+
+# --- Boards (multi-board management) ---
+
+
+@app.get("/api/boards")
+async def list_boards_endpoint(username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return await list_boards(user["id"])
+
+
+@app.post("/api/boards", status_code=201)
+async def create_board_endpoint(
+    body: CreateBoardRequest, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    board_id = await create_board(user["id"], body.name)
+    return {"id": board_id, "name": body.name}
+
+
+@app.patch("/api/boards/{bid}")
+async def rename_board_endpoint(
+    bid: int, body: RenameBoardRequest, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not await rename_board(bid, user["id"], body.name):
+        raise HTTPException(status_code=404, detail="Board not found")
+    return {"ok": True}
+
+
+@app.delete("/api/boards/{bid}")
+async def delete_board_endpoint(bid: int, username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    result = await delete_board(bid, user["id"])
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Board not found")
+    if result == "last_board":
+        raise HTTPException(status_code=400, detail="Cannot delete your only board")
+    return {"ok": True}
 
 
 # --- Board ---
@@ -172,6 +265,23 @@ async def patch_column(
     column_id: str, body: RenameColumnRequest, board_id: int = Depends(get_board_id)
 ):
     if not await rename_column(column_id, board_id, body.title):
+        raise HTTPException(status_code=404, detail="Column not found")
+    return {"ok": True}
+
+
+@app.post("/api/board/columns", status_code=201)
+async def add_column_endpoint(
+    body: CreateColumnRequest, board_id: int = Depends(get_board_id)
+):
+    col_id = await add_column(board_id, body.title)
+    return {"id": col_id, "title": body.title}
+
+
+@app.delete("/api/board/columns/{column_id}")
+async def delete_column_endpoint(
+    column_id: str, board_id: int = Depends(get_board_id)
+):
+    if not await delete_column(column_id, board_id):
         raise HTTPException(status_code=404, detail="Column not found")
     return {"ok": True}
 

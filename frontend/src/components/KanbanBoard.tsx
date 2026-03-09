@@ -23,7 +23,9 @@ const collisionDetection: CollisionDetection = (args) => {
 };
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import { BoardSelector } from "@/components/BoardSelector";
 import { moveCard, type BoardData, type Card } from "@/lib/kanban";
+import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
 
 interface KanbanBoardProps {
@@ -34,6 +36,14 @@ interface KanbanBoardProps {
   pendingBoard?: BoardData | null;
   /** Called after pendingBoard has been applied to internal state. */
   onPendingBoardApplied?: () => void;
+  /** Current board id. */
+  boardId?: number;
+  /** List of boards for the selector. */
+  boards?: Board[];
+  onBoardSelect?: (boardId: number) => void;
+  onBoardCreate?: (name: string) => void;
+  onBoardRename?: (boardId: number, name: string) => void;
+  onBoardDelete?: (boardId: number) => void;
 }
 
 export const KanbanBoard = ({
@@ -41,12 +51,20 @@ export const KanbanBoard = ({
   initialBoard,
   pendingBoard,
   onPendingBoardApplied,
+  boardId,
+  boards,
+  onBoardSelect,
+  onBoardCreate,
+  onBoardRename,
+  onBoardDelete,
 }: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(initialBoard ?? null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
   const [loading, setLoading] = useState(!initialBoard);
   const [error, setError] = useState<string | null>(null);
+  const [addingColumn, setAddingColumn] = useState(false);
+  const [newColumnTitle, setNewColumnTitle] = useState("");
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const showError = useCallback((msg: string) => {
@@ -55,12 +73,13 @@ export const KanbanBoard = ({
     errorTimer.current = setTimeout(() => setError(null), 4000);
   }, []);
 
-  // Fetch board on mount (skip if initialBoard provided)
+  // Fetch board on mount or when boardId changes (skip if initialBoard provided)
   useEffect(() => {
     if (initialBoard) return;
     let cancelled = false;
+    setLoading(true);
     api
-      .fetchBoard()
+      .fetchBoard(boardId)
       .then((data) => {
         if (!cancelled) setBoard(data);
       })
@@ -73,7 +92,7 @@ export const KanbanBoard = ({
     return () => {
       cancelled = true;
     };
-  }, [initialBoard, showError]);
+  }, [initialBoard, boardId, showError]);
 
   // Apply external board update in-place (avoids full remount)
   useEffect(() => {
@@ -133,12 +152,12 @@ export const KanbanBoard = ({
       const updated = { ...board, columns: newColumns };
       setBoard(updated);
 
-      api.saveColumnsOrder(updated).catch((err) => {
+      api.saveColumnsOrder(updated, boardId).catch((err) => {
         setBoard(board);
         showError(err.message);
       });
     },
-    [board, showError]
+    [board, boardId, showError]
   );
 
   const handleRenameColumn = (columnId: string, title: string) => {
@@ -151,7 +170,7 @@ export const KanbanBoard = ({
       ),
     });
 
-    api.renameColumn(columnId, title).catch((err) => {
+    api.renameColumn(columnId, title, boardId).catch((err) => {
       setBoard(prev);
       showError(err.message);
     });
@@ -162,7 +181,7 @@ export const KanbanBoard = ({
     const cardDetails = details || "No details yet.";
 
     api
-      .createCard(columnId, title, cardDetails)
+      .createCard(columnId, title, cardDetails, boardId)
       .then((card) => {
         setBoard((prev) => {
           if (!prev) return prev;
@@ -199,7 +218,7 @@ export const KanbanBoard = ({
       ),
     });
 
-    api.deleteCard(cardId).catch((err) => {
+    api.deleteCard(cardId, boardId).catch((err) => {
       setBoard(prev);
       showError(err.message);
     });
@@ -222,7 +241,49 @@ export const KanbanBoard = ({
     if (title !== existing?.title) fields.title = title;
     if (details !== existing?.details) fields.details = details;
 
-    api.updateCard(cardId, fields).catch((err) => {
+    api.updateCard(cardId, fields, boardId).catch((err) => {
+      setBoard(prev);
+      showError(err.message);
+    });
+  };
+
+  const handleAddColumn = () => {
+    const title = newColumnTitle.trim();
+    if (!title || !board) return;
+
+    api
+      .addColumn(title, boardId)
+      .then((col) => {
+        setBoard((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            columns: [...prev.columns, { id: col.id, title: col.title, cardIds: [] }],
+          };
+        });
+        setNewColumnTitle("");
+        setAddingColumn(false);
+      })
+      .catch((err) => showError(err.message));
+  };
+
+  const handleDeleteColumn = (columnId: string) => {
+    if (!board) return;
+    const prev = board;
+
+    // Remove the column and its cards from local state optimistically
+    const col = board.columns.find((c) => c.id === columnId);
+    const removedCardIds = new Set(col?.cardIds ?? []);
+
+    setBoard({
+      ...board,
+      columns: board.columns.filter((c) => c.id !== columnId),
+      cards: Object.fromEntries(
+        Object.entries(board.cards).filter(([id]) => !removedCardIds.has(id))
+      ),
+    });
+
+    api.deleteColumn(columnId, boardId).catch((err) => {
       setBoard(prev);
       showError(err.message);
     });
@@ -264,17 +325,30 @@ export const KanbanBoard = ({
             <div className="h-1 w-8 rounded-full bg-[var(--accent-yellow)]" />
           </div>
           <div className="mx-1 h-5 w-px bg-[var(--stroke)]" />
-          <div className="flex flex-1 flex-wrap items-center gap-2">
-            {board.columns.map((column) => (
-              <div
-                key={column.id}
-                className="flex items-center gap-1.5 rounded-full border border-[var(--stroke)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--navy-dark)]"
-              >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
-              </div>
-            ))}
-          </div>
+          {boards && boards.length > 0 && boardId && onBoardSelect && onBoardCreate && onBoardRename && onBoardDelete ? (
+            <div className="flex-1">
+              <BoardSelector
+                boards={boards}
+                currentBoardId={boardId}
+                onSelect={onBoardSelect}
+                onCreate={onBoardCreate}
+                onRename={onBoardRename}
+                onDelete={onBoardDelete}
+              />
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              {board.columns.map((column) => (
+                <div
+                  key={column.id}
+                  className="flex items-center gap-1.5 rounded-full border border-[var(--stroke)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--navy-dark)]"
+                >
+                  <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
+                  {column.title}
+                </div>
+              ))}
+            </div>
+          )}
           {onLogout && (
             <button
               onClick={onLogout}
@@ -295,7 +369,7 @@ export const KanbanBoard = ({
           <section className="overflow-x-auto">
             <div
               className="grid gap-4"
-              style={{ gridTemplateColumns: `repeat(${board.columns.length}, minmax(190px, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${board.columns.length + 1}, minmax(190px, 1fr))` }}
             >
               {board.columns.map((column) => (
                 <KanbanColumn
@@ -307,8 +381,54 @@ export const KanbanBoard = ({
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}
                   onEditCard={handleEditCard}
+                  onDeleteColumn={handleDeleteColumn}
                 />
               ))}
+              {/* Add column slot */}
+              <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-[var(--stroke)] bg-white/40 p-4">
+                {addingColumn ? (
+                  <div className="flex flex-col gap-2">
+                    <input
+                      autoFocus
+                      placeholder="Column name"
+                      value={newColumnTitle}
+                      onChange={(e) => setNewColumnTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleAddColumn();
+                        if (e.key === "Escape") {
+                          setAddingColumn(false);
+                          setNewColumnTitle("");
+                        }
+                      }}
+                      className="rounded-xl border border-[var(--primary-blue)] px-3 py-2 text-sm text-[var(--navy-dark)] outline-none"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAddColumn}
+                        className="flex-1 rounded-xl bg-[var(--primary-blue)] py-1.5 text-xs font-semibold text-white"
+                      >
+                        Add
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAddingColumn(false);
+                          setNewColumnTitle("");
+                        }}
+                        className="flex-1 rounded-xl border border-[var(--stroke)] py-1.5 text-xs font-semibold text-[var(--gray-text)]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingColumn(true)}
+                    className="flex h-full min-h-[60px] items-center justify-center rounded-xl text-sm font-semibold text-[var(--gray-text)] hover:text-[var(--primary-blue)] transition-colors"
+                  >
+                    + Add Column
+                  </button>
+                )}
+              </div>
             </div>
           </section>
           <DragOverlay>

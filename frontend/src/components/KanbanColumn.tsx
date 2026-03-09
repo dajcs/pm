@@ -15,6 +15,8 @@ type KanbanColumnProps = {
   onDeleteCard: (columnId: string, cardId: string) => void;
   onEditCard: (cardId: string, title: string, details: string) => void;
   onDeleteColumn?: (columnId: string) => void;
+  onUpdatePriority?: (cardId: string, priority: string) => void;
+  onUpdateDueDate?: (cardId: string, dueDate: string | null) => void;
 };
 
 export const KanbanColumn = ({
@@ -26,6 +28,8 @@ export const KanbanColumn = ({
   onDeleteCard,
   onEditCard,
   onDeleteColumn,
+  onUpdatePriority,
+  onUpdateDueDate,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
@@ -94,6 +98,8 @@ export const KanbanColumn = ({
               card={card}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
               onEdit={onEditCard}
+              onUpdatePriority={onUpdatePriority}
+              onUpdateDueDate={onUpdateDueDate}
             />
           ))}
         </SortableContext>

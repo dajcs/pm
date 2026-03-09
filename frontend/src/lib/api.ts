@@ -62,11 +62,13 @@ export async function createCard(
   columnId: string,
   title: string,
   details: string,
-  boardId?: number
-): Promise<{ id: string; title: string; details: string }> {
+  boardId?: number,
+  due_date?: string | null,
+  priority?: string
+): Promise<{ id: string; title: string; details: string; due_date?: string | null; priority?: string }> {
   return request(`/api/board/cards${boardParam(boardId)}`, {
     method: "POST",
-    body: JSON.stringify({ column_id: columnId, title, details }),
+    body: JSON.stringify({ column_id: columnId, title, details, due_date, priority }),
   });
 }
 
@@ -76,7 +78,7 @@ export async function deleteCard(cardId: string, boardId?: number): Promise<void
 
 export async function updateCard(
   cardId: string,
-  fields: { title?: string; details?: string },
+  fields: { title?: string; details?: string; due_date?: string | null; priority?: string },
   boardId?: number
 ): Promise<void> {
   await request(`/api/board/cards/${cardId}${boardParam(boardId)}`, {
@@ -139,6 +141,23 @@ export async function renameBoardApi(id: number, name: string): Promise<void> {
 
 export async function deleteBoardApi(id: number): Promise<void> {
   await request(`/api/boards/${id}`, { method: "DELETE" });
+}
+
+export interface BoardStats {
+  total_cards: number;
+  cards_by_column: Record<string, number>;
+  overdue_count: number;
+}
+
+export async function getBoardStats(boardId: number): Promise<BoardStats> {
+  return request<BoardStats>(`/api/boards/${boardId}/stats`);
+}
+
+export async function updateBoardDescription(boardId: number, description: string): Promise<void> {
+  await request(`/api/boards/${boardId}/description`, {
+    method: "PATCH",
+    body: JSON.stringify({ description }),
+  });
 }
 
 // --- Auth ---

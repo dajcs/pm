@@ -10,6 +10,8 @@ class Card(BaseModel):
     id: str
     title: str = Field(max_length=200)
     details: str = Field(default="No details yet.", max_length=4000)
+    due_date: str | None = None
+    priority: str = "none"
 
 
 class Column(BaseModel):
@@ -27,11 +29,25 @@ class CreateCardRequest(BaseModel):
     column_id: str
     title: str = Field(max_length=200)
     details: str = Field(default="No details yet.", max_length=4000)
+    due_date: str | None = None
+    priority: str = "none"
 
 
 class UpdateCardRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     details: str | None = Field(default=None, max_length=4000)
+    due_date: str | None = None
+    priority: str | None = None
+
+
+class BoardStatsResponse(BaseModel):
+    total_cards: int
+    cards_by_column: dict[str, int]
+    overdue_count: int
+
+
+class UpdateBoardDescriptionRequest(BaseModel):
+    description: str = Field(max_length=2000)
 
 
 class RenameColumnRequest(BaseModel):

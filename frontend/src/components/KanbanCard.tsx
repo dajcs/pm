@@ -8,12 +8,36 @@ type KanbanCardProps = {
   card: Card;
   onDelete: (cardId: string) => void;
   onEdit: (cardId: string, title: string, details: string) => void;
+  onUpdatePriority?: (cardId: string, priority: string) => void;
+  onUpdateDueDate?: (cardId: string, dueDate: string | null) => void;
 };
 
-export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
-  const [editingField, setEditingField] = useState<"title" | "details" | null>(null);
+const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
+
+const PRIORITY_STYLES: Record<string, { dot: string; label: string }> = {
+  none:   { dot: "bg-[var(--gray-text)]", label: "none" },
+  low:    { dot: "bg-[var(--primary-blue)]", label: "low" },
+  medium: { dot: "bg-[var(--accent-yellow)]", label: "medium" },
+  high:   { dot: "bg-orange-500", label: "high" },
+  urgent: { dot: "bg-red-500", label: "urgent" },
+};
+
+function getDueDateStyle(dueDate: string | null | undefined): string {
+  if (!dueDate) return "text-[var(--gray-text)]";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(dueDate + "T00:00:00");
+  const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return "text-red-500";
+  if (diffDays <= 7) return "text-[var(--accent-yellow)]";
+  return "text-[var(--gray-text)]";
+}
+
+export const KanbanCard = ({ card, onDelete, onEdit, onUpdatePriority, onUpdateDueDate }: KanbanCardProps) => {
+  const [editingField, setEditingField] = useState<"title" | "details" | "due_date" | null>(null);
   const [editTitle, setEditTitle] = useState(card.title);
   const [editDetails, setEditDetails] = useState(card.details);
+  const [editDueDate, setEditDueDate] = useState(card.due_date ?? "");
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
 
@@ -46,6 +70,26 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
       commitEdit();
     }
   };
+
+  const cyclePriority = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const current = card.priority ?? "none";
+    const idx = PRIORITIES.indexOf(current);
+    const next = PRIORITIES[(idx + 1) % PRIORITIES.length];
+    onUpdatePriority?.(card.id, next);
+  };
+
+  const commitDueDate = () => {
+    const val = editDueDate.trim() || null;
+    if (val !== (card.due_date ?? null)) {
+      onUpdateDueDate?.(card.id, val);
+    }
+    setEditingField(null);
+  };
+
+  const priority = card.priority ?? "none";
+  const priorityStyle = PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.none;
+  const dueDateStyle = getDueDateStyle(card.due_date);
 
   return (
     <article
@@ -116,6 +160,45 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
               {card.details}
             </p>
           )}
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={cyclePriority}
+              className="flex items-center gap-1 rounded-full border border-[var(--stroke)] px-2 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--primary-blue)] transition-colors"
+              aria-label={`Priority: ${priority}`}
+              title={`Priority: ${priority} (click to cycle)`}
+            >
+              <span className={clsx("h-2 w-2 rounded-full", priorityStyle.dot)} />
+              {priorityStyle.label}
+            </button>
+            {editingField === "due_date" ? (
+              <input
+                type="date"
+                value={editDueDate}
+                onChange={(e) => setEditDueDate(e.target.value)}
+                onBlur={commitDueDate}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setEditingField(null);
+                  if (e.key === "Enter") commitDueDate();
+                }}
+                className="text-xs rounded border border-[var(--primary-blue)] px-1 py-0.5 outline-none"
+                autoFocus
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditDueDate(card.due_date ?? "");
+                  setEditingField("due_date");
+                }}
+                className={clsx("text-xs hover:underline", dueDateStyle)}
+                aria-label="Set due date"
+              >
+                {card.due_date ? card.due_date : "no due date"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </article>

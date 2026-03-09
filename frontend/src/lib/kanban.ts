@@ -2,6 +2,8 @@ export type Card = {
   id: string;
   title: string;
   details: string;
+  due_date?: string | null;
+  priority?: string;
 };
 
 export type Column = {
@@ -19,6 +21,7 @@ export type Board = {
   id: number;
   name: string;
   created_at: string;
+  description?: string;
 };
 
 const isColumnId = (columns: Column[], id: string) =>

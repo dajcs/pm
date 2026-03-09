@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,6 +71,18 @@ async def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_cards_column_id ON cards(column_id);
         """)
 
+        # Migrations: add new columns if they don't exist
+        for migration_sql in [
+            "ALTER TABLE cards ADD COLUMN due_date TEXT",
+            "ALTER TABLE cards ADD COLUMN priority TEXT NOT NULL DEFAULT 'none'",
+            "ALTER TABLE boards ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        ]:
+            try:
+                await db.execute(migration_sql)
+                await db.commit()
+            except Exception:
+                pass  # Column already exists
+
         # Seed default user if not exists
         row = await db.execute_fetchall(
             "SELECT id FROM users WHERE username = ?", ("user",)
@@ -138,7 +151,7 @@ async def load_board(board_id: int) -> dict:
             (board_id,),
         )
         card_rows = await db.execute_fetchall(
-            """SELECT cards.id, cards.column_id, cards.title, cards.details
+            """SELECT cards.id, cards.column_id, cards.title, cards.details, cards.due_date, cards.priority
                FROM cards
                JOIN columns ON cards.column_id = columns.id
                WHERE columns.board_id = ?
@@ -150,7 +163,13 @@ async def load_board(board_id: int) -> dict:
         for card in card_rows:
             card_id = card["id"]
             col_id = card["column_id"]
-            cards[card_id] = {"id": card_id, "title": card["title"], "details": card["details"]}
+            cards[card_id] = {
+                "id": card_id,
+                "title": card["title"],
+                "details": card["details"],
+                "due_date": card["due_date"],
+                "priority": card["priority"] or "none",
+            }
             if col_id in cards_by_col:
                 cards_by_col[col_id].append(card_id)
         columns = [
@@ -176,8 +195,14 @@ async def save_board(board_id: int, data: dict) -> None:
                 card = data["cards"].get(card_id)
                 if card:
                     await db.execute(
-                        "INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
-                        (card["id"], col["id"], card["title"], card.get("details", "No details yet."), card_pos),
+                        "INSERT INTO cards (id, column_id, title, details, position, due_date, priority) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            card["id"], col["id"], card["title"],
+                            card.get("details", "No details yet."),
+                            card_pos,
+                            card.get("due_date"),
+                            card.get("priority", "none"),
+                        ),
                     )
         await db.commit()
     except Exception:
@@ -187,7 +212,7 @@ async def save_board(board_id: int, data: dict) -> None:
         await db.close()
 
 
-async def create_card(board_id: int, column_id: str, title: str, details: str) -> str | None:
+async def create_card(board_id: int, column_id: str, title: str, details: str, due_date: str | None = None, priority: str = "none") -> str | None:
     """Verify column belongs to board, insert card, return card_id. Returns None if column not found."""
     db = await get_db()
     try:
@@ -205,8 +230,8 @@ async def create_card(board_id: int, column_id: str, title: str, details: str) -
         position = row["next_pos"]
         card_id = f"card-{uuid.uuid4().hex[:8]}"
         await db.execute(
-            "INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
-            (card_id, column_id, title, details, position),
+            "INSERT INTO cards (id, column_id, title, details, position, due_date, priority) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (card_id, column_id, title, details, position, due_date, priority),
         )
         await db.commit()
         return card_id
@@ -229,7 +254,7 @@ async def delete_card(card_id: str, board_id: int) -> bool:
         await db.close()
 
 
-async def update_card(card_id: str, board_id: int, title: str | None, details: str | None) -> bool:
+async def update_card(card_id: str, board_id: int, updates: dict) -> bool:
     """Update card fields if it belongs to the board. Returns True if found, False if not found."""
     db = await get_db()
     try:
@@ -241,13 +266,17 @@ async def update_card(card_id: str, board_id: int, title: str | None, details: s
         )
         if not await cursor.fetchone():
             return False
+        field_map = {
+            "title": "title",
+            "details": "details",
+            "due_date": "due_date",
+            "priority": "priority",
+        }
         fields, values = [], []
-        if title is not None:
-            fields.append("title = ?")
-            values.append(title)
-        if details is not None:
-            fields.append("details = ?")
-            values.append(details)
+        for key, col in field_map.items():
+            if key in updates:
+                fields.append(f"{col} = ?")
+                values.append(updates[key])
         if not fields:
             return True  # card found, nothing to update
         values.append(card_id)
@@ -276,10 +305,10 @@ async def list_boards(user_id: int) -> list[dict]:
     db = await get_db()
     try:
         rows = await db.execute_fetchall(
-            "SELECT id, name, created_at FROM boards WHERE user_id = ? ORDER BY created_at",
+            "SELECT id, name, created_at, description FROM boards WHERE user_id = ? ORDER BY created_at",
             (user_id,),
         )
-        return [{"id": r["id"], "name": r["name"], "created_at": r["created_at"]} for r in rows]
+        return [{"id": r["id"], "name": r["name"], "created_at": r["created_at"], "description": r["description"] or ""} for r in rows]
     finally:
         await db.close()
 
@@ -405,6 +434,51 @@ async def delete_column(column_id: str, board_id: int) -> bool:
         cursor = await db.execute(
             "DELETE FROM columns WHERE id = ? AND board_id = ?",
             (column_id, board_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def get_board_stats(board_id: int) -> dict:
+    """Return stats: total cards, cards per column, overdue count."""
+    from datetime import date
+    db = await get_db()
+    try:
+        cols = await db.execute_fetchall(
+            "SELECT id, title FROM columns WHERE board_id = ? ORDER BY position",
+            (board_id,),
+        )
+        today = date.today().isoformat()
+        cards_by_column = {}
+        total = 0
+        overdue = 0
+        for col in cols:
+            rows = await db.execute_fetchall(
+                "SELECT id, due_date FROM cards WHERE column_id = ?", (col["id"],)
+            )
+            count = len(rows)
+            cards_by_column[col["title"]] = count
+            total += count
+            for row in rows:
+                if row["due_date"] and row["due_date"] < today:
+                    overdue += 1
+        return {
+            "total_cards": total,
+            "cards_by_column": cards_by_column,
+            "overdue_count": overdue,
+        }
+    finally:
+        await db.close()
+
+
+async def update_board_description(board_id: int, user_id: int, description: str) -> bool:
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "UPDATE boards SET description = ? WHERE id = ? AND user_id = ?",
+            (description, board_id, user_id),
         )
         await db.commit()
         return cursor.rowcount > 0

@@ -65,6 +65,8 @@ export const KanbanBoard = ({
   const [error, setError] = useState<string | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState("");
+  const [filterPriority, setFilterPriority] = useState<string | null>(null);
+  const [filterOverdue, setFilterOverdue] = useState(false);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const showError = useCallback((msg: string) => {
@@ -247,6 +249,34 @@ export const KanbanBoard = ({
     });
   };
 
+  const handleUpdatePriority = (cardId: string, priority: string) => {
+    if (!board) return;
+    const existing = board.cards[cardId];
+    const prev = board;
+    setBoard({
+      ...board,
+      cards: { ...board.cards, [cardId]: { ...existing, priority } },
+    });
+    api.updateCard(cardId, { priority }, boardId).catch((err) => {
+      setBoard(prev);
+      showError(err.message);
+    });
+  };
+
+  const handleUpdateDueDate = (cardId: string, dueDate: string | null) => {
+    if (!board) return;
+    const existing = board.cards[cardId];
+    const prev = board;
+    setBoard({
+      ...board,
+      cards: { ...board.cards, [cardId]: { ...existing, due_date: dueDate } },
+    });
+    api.updateCard(cardId, { due_date: dueDate }, boardId).catch((err) => {
+      setBoard(prev);
+      showError(err.message);
+    });
+  };
+
   const handleAddColumn = () => {
     const title = newColumnTitle.trim();
     if (!title || !board) return;
@@ -290,6 +320,19 @@ export const KanbanBoard = ({
   };
 
   const activeCard = activeCardId && board ? board.cards[activeCardId] : null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const isCardVisible = (card: Card): boolean => {
+    if (filterPriority && (card.priority ?? "none") !== filterPriority) return false;
+    if (filterOverdue) {
+      if (!card.due_date) return false;
+      const due = new Date(card.due_date + "T00:00:00");
+      if (due >= today) return false;
+    }
+    return true;
+  };
 
   if (loading) {
     return (
@@ -359,6 +402,41 @@ export const KanbanBoard = ({
           )}
         </header>
 
+        <div className="flex flex-wrap items-center gap-2 px-1">
+          <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--gray-text)]">Filter:</span>
+          {["none", "low", "medium", "high", "urgent"].map((p) => (
+            <button
+              key={p}
+              onClick={() => setFilterPriority(filterPriority === p ? null : p)}
+              className={`rounded-full border px-3 py-0.5 text-xs font-semibold transition-colors ${
+                filterPriority === p
+                  ? "border-[var(--primary-blue)] bg-[var(--primary-blue)] text-white"
+                  : "border-[var(--stroke)] text-[var(--gray-text)] hover:border-[var(--primary-blue)]"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+          <button
+            onClick={() => setFilterOverdue(!filterOverdue)}
+            className={`rounded-full border px-3 py-0.5 text-xs font-semibold transition-colors ${
+              filterOverdue
+                ? "border-red-500 bg-red-500 text-white"
+                : "border-[var(--stroke)] text-[var(--gray-text)] hover:border-red-500"
+            }`}
+          >
+            overdue
+          </button>
+          {(filterPriority || filterOverdue) && (
+            <button
+              onClick={() => { setFilterPriority(null); setFilterOverdue(false); }}
+              className="text-xs text-[var(--gray-text)] hover:text-[var(--navy-dark)] underline"
+            >
+              clear
+            </button>
+          )}
+        </div>
+
         <DndContext
           sensors={sensors}
           collisionDetection={collisionDetection}
@@ -375,13 +453,15 @@ export const KanbanBoard = ({
                 <KanbanColumn
                   key={column.id}
                   column={column}
-                  cards={column.cardIds.map((id) => board.cards[id]).filter((c): c is Card => c !== undefined)}
+                  cards={column.cardIds.map((id) => board.cards[id]).filter((c): c is Card => c !== undefined && isCardVisible(c))}
                   isHighlighted={overColumnId === column.id}
                   onRename={handleRenameColumn}
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}
                   onEditCard={handleEditCard}
                   onDeleteColumn={handleDeleteColumn}
+                  onUpdatePriority={handleUpdatePriority}
+                  onUpdateDueDate={handleUpdateDueDate}
                 />
               ))}
               {/* Add column slot */}

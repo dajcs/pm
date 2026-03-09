@@ -24,6 +24,7 @@ from database import (
     delete_card,
     delete_column,
     get_board_by_id,
+    get_board_stats,
     get_or_create_board,
     get_user_by_username,
     init_db,
@@ -32,12 +33,14 @@ from database import (
     rename_board,
     rename_column,
     save_board,
+    update_board_description,
     update_card,
     update_user_password,
     verify_password,
 )
 from models import (
     BoardData,
+    BoardStatsResponse,
     ChangePasswordRequest,
     ChatRequest,
     CreateBoardRequest,
@@ -47,6 +50,7 @@ from models import (
     RegisterRequest,
     RenameBoardRequest,
     RenameColumnRequest,
+    UpdateBoardDescriptionRequest,
     UpdateCardRequest,
 )
 
@@ -213,6 +217,29 @@ async def delete_board_endpoint(bid: int, username: str = Depends(get_current_us
     return {"ok": True}
 
 
+@app.get("/api/boards/{bid}/stats")
+async def board_stats(bid: int, username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    verified = await get_board_by_id(bid, user["id"])
+    if verified is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return await get_board_stats(bid)
+
+
+@app.patch("/api/boards/{bid}/description")
+async def update_board_description_endpoint(
+    bid: int, body: UpdateBoardDescriptionRequest, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not await update_board_description(bid, user["id"], body.description):
+        raise HTTPException(status_code=404, detail="Board not found")
+    return {"ok": True}
+
+
 # --- Board ---
 
 
@@ -235,10 +262,10 @@ async def put_board(data: BoardData, board_id: int = Depends(get_board_id)):
 
 @app.post("/api/board/cards", status_code=201)
 async def post_card(body: CreateCardRequest, board_id: int = Depends(get_board_id)):
-    card_id = await create_card(board_id, body.column_id, body.title, body.details)
+    card_id = await create_card(board_id, body.column_id, body.title, body.details, body.due_date, body.priority)
     if card_id is None:
         raise HTTPException(status_code=404, detail="Column not found")
-    return {"id": card_id, "title": body.title, "details": body.details}
+    return {"id": card_id, "title": body.title, "details": body.details, "due_date": body.due_date, "priority": body.priority}
 
 
 @app.delete("/api/board/cards/{card_id}")
@@ -252,7 +279,12 @@ async def delete_card_endpoint(card_id: str, board_id: int = Depends(get_board_i
 async def patch_card(
     card_id: str, body: UpdateCardRequest, board_id: int = Depends(get_board_id)
 ):
-    if not await update_card(card_id, board_id, body.title, body.details):
+    updates = body.model_dump(exclude_unset=True)
+    if "title" in updates and updates["title"] is None:
+        updates.pop("title")
+    if "details" in updates and updates["details"] is None:
+        updates.pop("details")
+    if not await update_card(card_id, board_id, updates):
         raise HTTPException(status_code=404, detail="Card not found")
     return {"ok": True}
 

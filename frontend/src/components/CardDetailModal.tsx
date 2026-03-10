@@ -7,6 +7,7 @@ import { ChecklistPanel } from "@/components/ChecklistPanel";
 import { CommentsPanel } from "@/components/CommentsPanel";
 import { DependenciesPanel } from "@/components/DependenciesPanel";
 import { TimeTrackingPanel } from "@/components/TimeTrackingPanel";
+import { CardSprintPanel } from "@/components/CardSprintPanel";
 
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
 const PRIORITY_STYLES: Record<string, { dot: string }> = {
@@ -295,6 +296,16 @@ export const CardDetailModal = ({
             </div>
             <DependenciesPanel cardId={card.id} boardId={boardId} allCardTitles={allCardTitles} />
           </div>
+
+          {/* Sprint */}
+          {boardId && (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--gray-text)] mb-2">
+                Sprints
+              </div>
+              <CardSprintPanel cardId={card.id} boardId={boardId} />
+            </div>
+          )}
 
           {/* Time Tracking */}
           <div>

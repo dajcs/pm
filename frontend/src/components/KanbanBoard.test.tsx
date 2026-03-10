@@ -33,6 +33,14 @@ vi.mock("@/lib/api", () => ({
   addTimeEntry: vi.fn().mockResolvedValue({ id: 1, username: "user", hours: 1, description: "", date: "2026-03-10", created_at: "" }),
   deleteTimeEntry: vi.fn().mockResolvedValue(undefined),
   getBoardTimeReport: vi.fn().mockResolvedValue([]),
+  listSprints: vi.fn().mockResolvedValue([]),
+  createSprint: vi.fn().mockResolvedValue({ id: 1, name: "Sprint 1", goal: "", status: "planned", start_date: null, end_date: null, created_at: "" }),
+  getSprint: vi.fn().mockResolvedValue({ id: 1, name: "Sprint 1", goal: "", status: "planned", start_date: null, end_date: null, created_at: "", cards: [] }),
+  updateSprint: vi.fn().mockResolvedValue(undefined),
+  deleteSprint: vi.fn().mockResolvedValue(undefined),
+  getCardSprints: vi.fn().mockResolvedValue([]),
+  assignCardToSprint: vi.fn().mockResolvedValue(undefined),
+  removeCardFromSprint: vi.fn().mockResolvedValue(undefined),
 }));
 
 const renderBoard = () =>

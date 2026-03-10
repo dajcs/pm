@@ -31,6 +31,7 @@ import { StatsPanel } from "@/components/StatsPanel";
 import { CardDetailModal } from "@/components/CardDetailModal";
 import { BoardSharePanel } from "@/components/BoardSharePanel";
 import { DashboardPanel } from "@/components/DashboardPanel";
+import { SprintPanel } from "@/components/SprintPanel";
 import { moveCard, moveColumn, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
@@ -84,6 +85,7 @@ export const KanbanBoard = ({
   const [showStats, setShowStats] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showSprints, setShowSprints] = useState(false);
   const [detailCardId, setDetailCardId] = useState<string | null>(null);
   const [boardMembers, setBoardMembers] = useState<string[]>([]);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -105,6 +107,7 @@ export const KanbanBoard = ({
       setShowStats(false);
       setShowShare(false);
       setShowDashboard(false);
+      setShowSprints(false);
       setDetailCardId(null);
       setAddingColumn(false);
       searchInputRef.current?.blur();
@@ -640,6 +643,15 @@ export const KanbanBoard = ({
             >
               dashboard
             </button>
+            {boardId && (
+              <button
+                onClick={() => setShowSprints(true)}
+                className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
+                title="Sprints"
+              >
+                sprints
+              </button>
+            )}
             <button
               onClick={() => setShowArchive(true)}
               className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
@@ -808,6 +820,9 @@ export const KanbanBoard = ({
             setShowDashboard(false);
           }}
         />
+      )}
+      {showSprints && boardId && (
+        <SprintPanel boardId={boardId} onClose={() => setShowSprints(false)} />
       )}
       {showActivity && boardId && (
         <ActivityFeed boardId={boardId} onClose={() => setShowActivity(false)} />

@@ -122,6 +122,23 @@ async def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_time_entries_card ON time_entries(card_id);
             CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id);
+            CREATE TABLE IF NOT EXISTS sprints (
+                id INTEGER PRIMARY KEY,
+                board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                goal TEXT NOT NULL DEFAULT '',
+                start_date TEXT,
+                end_date TEXT,
+                status TEXT NOT NULL DEFAULT 'planned',
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_sprints_board ON sprints(board_id);
+            CREATE TABLE IF NOT EXISTS card_sprint (
+                card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                sprint_id INTEGER NOT NULL REFERENCES sprints(id) ON DELETE CASCADE,
+                PRIMARY KEY (card_id, sprint_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_card_sprint_sprint ON card_sprint(sprint_id);
         """)
 
         # Migrations: add new columns if they don't exist
@@ -1251,6 +1268,172 @@ async def get_dashboard(user_id: int) -> dict:
             "total_overdue": len(overdue_cards),
             "total_due_soon": len(due_soon_cards),
         }
+    finally:
+        await db.close()
+
+
+async def create_sprint(board_id: int, name: str, goal: str, start_date: str | None, end_date: str | None) -> dict:
+    """Create a sprint for a board. Returns the new sprint dict."""
+    db = await get_db()
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = await db.execute(
+            "INSERT INTO sprints (board_id, name, goal, start_date, end_date, status, created_at) VALUES (?, ?, ?, ?, ?, 'planned', ?)",
+            (board_id, name, goal, start_date, end_date, now),
+        )
+        await db.commit()
+        return {"id": cursor.lastrowid, "board_id": board_id, "name": name, "goal": goal,
+                "start_date": start_date, "end_date": end_date, "status": "planned", "created_at": now}
+    finally:
+        await db.close()
+
+
+async def list_sprints(board_id: int) -> list[dict]:
+    """List all sprints for a board with card counts."""
+    db = await get_db()
+    try:
+        sprints = await db.execute_fetchall(
+            "SELECT * FROM sprints WHERE board_id = ? ORDER BY created_at DESC",
+            (board_id,),
+        )
+        result = []
+        for s in sprints:
+            total_rows = await db.execute_fetchall(
+                "SELECT COUNT(*) as cnt FROM card_sprint WHERE sprint_id = ?", (s["id"],)
+            )
+            total = total_rows[0]["cnt"]
+            done_rows = await db.execute_fetchall(
+                """SELECT COUNT(*) as cnt FROM card_sprint cs
+                   JOIN cards c ON cs.card_id = c.id
+                   JOIN columns col ON c.column_id = col.id
+                   WHERE cs.sprint_id = ? AND LOWER(col.title) = 'done'""",
+                (s["id"],),
+            )
+            done = done_rows[0]["cnt"]
+            result.append({
+                "id": s["id"], "board_id": s["board_id"], "name": s["name"], "goal": s["goal"],
+                "start_date": s["start_date"], "end_date": s["end_date"], "status": s["status"],
+                "created_at": s["created_at"], "total_cards": total, "done_cards": done,
+            })
+        return result
+    finally:
+        await db.close()
+
+
+async def get_sprint(sprint_id: int, board_id: int) -> dict | None:
+    """Return sprint with its card list, or None if not found."""
+    db = await get_db()
+    try:
+        rows = await db.execute_fetchall(
+            "SELECT * FROM sprints WHERE id = ? AND board_id = ?", (sprint_id, board_id)
+        )
+        if not rows:
+            return None
+        s = rows[0]
+        card_rows = await db.execute_fetchall(
+            """SELECT c.id, c.title, c.priority, c.due_date, c.assigned_to, col.title as column_title
+               FROM card_sprint cs JOIN cards c ON cs.card_id = c.id
+               JOIN columns col ON c.column_id = col.id
+               WHERE cs.sprint_id = ? AND c.archived = 0
+               ORDER BY c.position""",
+            (sprint_id,),
+        )
+        return {
+            "id": s["id"], "board_id": s["board_id"], "name": s["name"], "goal": s["goal"],
+            "start_date": s["start_date"], "end_date": s["end_date"], "status": s["status"],
+            "created_at": s["created_at"],
+            "cards": [{"id": r["id"], "title": r["title"], "priority": r["priority"] or "none",
+                       "due_date": r["due_date"], "assigned_to": r["assigned_to"],
+                       "column_title": r["column_title"]} for r in card_rows],
+        }
+    finally:
+        await db.close()
+
+
+async def update_sprint(sprint_id: int, board_id: int, fields: dict) -> bool:
+    """Update sprint fields. Returns True if updated."""
+    if not fields:
+        return False
+    db = await get_db()
+    try:
+        allowed = {"name", "goal", "start_date", "end_date", "status"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return False
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        vals = list(updates.values()) + [sprint_id, board_id]
+        cursor = await db.execute(
+            f"UPDATE sprints SET {set_clause} WHERE id = ? AND board_id = ?", vals
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def delete_sprint(sprint_id: int, board_id: int) -> bool:
+    """Delete a sprint. Returns True if deleted."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "DELETE FROM sprints WHERE id = ? AND board_id = ?", (sprint_id, board_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def assign_card_to_sprint(card_id: str, sprint_id: int, board_id: int) -> str:
+    """Assign card to sprint. Returns 'ok', 'not_found', or 'duplicate'."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return "not_found"
+        sprint_rows = await db.execute_fetchall(
+            "SELECT id FROM sprints WHERE id = ? AND board_id = ?", (sprint_id, board_id)
+        )
+        if not sprint_rows:
+            return "not_found"
+        try:
+            await db.execute(
+                "INSERT INTO card_sprint (card_id, sprint_id) VALUES (?, ?)", (card_id, sprint_id)
+            )
+            await db.commit()
+            return "ok"
+        except Exception:
+            return "duplicate"
+    finally:
+        await db.close()
+
+
+async def remove_card_from_sprint(card_id: str, sprint_id: int, board_id: int) -> bool:
+    """Remove card from sprint. Returns True if removed."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "DELETE FROM card_sprint WHERE card_id = ? AND sprint_id = ?", (card_id, sprint_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def get_card_sprints(card_id: str, board_id: int) -> list[dict] | None:
+    """Return sprints a card belongs to, or None if card not on board."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return None
+        rows = await db.execute_fetchall(
+            """SELECT s.id, s.name, s.status FROM card_sprint cs
+               JOIN sprints s ON cs.sprint_id = s.id
+               WHERE cs.card_id = ? AND s.board_id = ?
+               ORDER BY s.created_at DESC""",
+            (card_id, board_id),
+        )
+        return [{"id": r["id"], "name": r["name"], "status": r["status"]} for r in rows]
     finally:
         await db.close()
 

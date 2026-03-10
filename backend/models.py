@@ -188,3 +188,22 @@ class BoardTimeReportEntry(BaseModel):
     card_title: str
     username: str
     total_hours: float
+
+
+class CreateSprintRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    goal: str = Field(default="", max_length=1000)
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class UpdateSprintRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+    goal: str | None = Field(default=None, max_length=1000)
+    start_date: str | None = None
+    end_date: str | None = None
+    status: str | None = None
+
+
+class AssignCardSprintRequest(BaseModel):
+    sprint_id: int

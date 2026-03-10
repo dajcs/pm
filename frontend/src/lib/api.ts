@@ -390,6 +390,85 @@ export interface ChatResponse {
   board_update: BoardData | null;
 }
 
+// --- Sprints ---
+
+export interface Sprint {
+  id: number;
+  board_id: number;
+  name: string;
+  goal: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: "planned" | "active" | "completed";
+  created_at: string;
+  total_cards?: number;
+  done_cards?: number;
+}
+
+export interface SprintCard {
+  id: string;
+  title: string;
+  priority: string;
+  due_date: string | null;
+  assigned_to: string | null;
+  column_title: string;
+}
+
+export interface SprintDetail extends Sprint {
+  cards: SprintCard[];
+}
+
+export async function listSprints(boardId: number): Promise<Sprint[]> {
+  return request<Sprint[]>(`/api/boards/${boardId}/sprints`);
+}
+
+export async function createSprint(
+  boardId: number,
+  name: string,
+  goal: string,
+  start_date: string | null,
+  end_date: string | null
+): Promise<Sprint> {
+  return request<Sprint>(`/api/boards/${boardId}/sprints`, {
+    method: "POST",
+    body: JSON.stringify({ name, goal, start_date, end_date }),
+  });
+}
+
+export async function getSprint(boardId: number, sprintId: number): Promise<SprintDetail> {
+  return request<SprintDetail>(`/api/boards/${boardId}/sprints/${sprintId}`);
+}
+
+export async function updateSprint(
+  boardId: number,
+  sprintId: number,
+  fields: Partial<{ name: string; goal: string; start_date: string | null; end_date: string | null; status: string }>
+): Promise<void> {
+  await request(`/api/boards/${boardId}/sprints/${sprintId}`, {
+    method: "PATCH",
+    body: JSON.stringify(fields),
+  });
+}
+
+export async function deleteSprint(boardId: number, sprintId: number): Promise<void> {
+  await request(`/api/boards/${boardId}/sprints/${sprintId}`, { method: "DELETE" });
+}
+
+export async function getCardSprints(cardId: string, boardId?: number): Promise<{ id: number; name: string; status: string }[]> {
+  return request(`/api/board/cards/${cardId}/sprints${boardParam(boardId)}`);
+}
+
+export async function assignCardToSprint(cardId: string, sprintId: number, boardId?: number): Promise<void> {
+  await request(`/api/board/cards/${cardId}/sprints${boardParam(boardId)}`, {
+    method: "POST",
+    body: JSON.stringify({ sprint_id: sprintId }),
+  });
+}
+
+export async function removeCardFromSprint(cardId: string, sprintId: number, boardId?: number): Promise<void> {
+  await request(`/api/board/cards/${cardId}/sprints/${sprintId}${boardParam(boardId)}`, { method: "DELETE" });
+}
+
 // --- Time Tracking ---
 
 export interface TimeEntry {

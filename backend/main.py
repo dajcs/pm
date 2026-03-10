@@ -68,6 +68,14 @@ from database import (
     get_time_entries,
     delete_time_entry,
     get_board_time_report,
+    create_sprint,
+    list_sprints,
+    get_sprint,
+    update_sprint,
+    delete_sprint,
+    assign_card_to_sprint,
+    remove_card_from_sprint,
+    get_card_sprints,
 )
 from models import (
     ActivityEntry,
@@ -85,6 +93,9 @@ from models import (
     AddTimeEntryRequest,
     BoardTimeReportEntry,
     TimeEntry,
+    CreateSprintRequest,
+    UpdateSprintRequest,
+    AssignCardSprintRequest,
     CreateBoardFromTemplateRequest,
     CreateBoardRequest,
     CreateCardRequest,
@@ -716,6 +727,105 @@ async def board_time_report_endpoint(
     if verified is None:
         raise HTTPException(status_code=404, detail="Board not found")
     return await get_board_time_report(bid)
+
+
+# --- Sprints ---
+
+
+@app.get("/api/boards/{bid}/sprints")
+async def list_sprints_endpoint(bid: int, username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not await get_board_by_id(bid, user["id"]):
+        raise HTTPException(status_code=404, detail="Board not found")
+    return await list_sprints(bid)
+
+
+@app.post("/api/boards/{bid}/sprints", status_code=201)
+async def create_sprint_endpoint(
+    bid: int, body: CreateSprintRequest, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not await get_board_by_id(bid, user["id"]):
+        raise HTTPException(status_code=404, detail="Board not found")
+    sprint = await create_sprint(bid, body.name, body.goal, body.start_date, body.end_date)
+    await add_activity(bid, username, f"created sprint \"{body.name}\"")
+    return sprint
+
+
+@app.get("/api/boards/{bid}/sprints/{sid}")
+async def get_sprint_endpoint(bid: int, sid: int, username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not await get_board_by_id(bid, user["id"]):
+        raise HTTPException(status_code=404, detail="Board not found")
+    sprint = await get_sprint(sid, bid)
+    if sprint is None:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    return sprint
+
+
+@app.patch("/api/boards/{bid}/sprints/{sid}")
+async def update_sprint_endpoint(
+    bid: int, sid: int, body: UpdateSprintRequest, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not await get_board_by_id(bid, user["id"]):
+        raise HTTPException(status_code=404, detail="Board not found")
+    fields = body.model_dump(exclude_unset=True)
+    if not await update_sprint(sid, bid, fields):
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    return {"ok": True}
+
+
+@app.delete("/api/boards/{bid}/sprints/{sid}")
+async def delete_sprint_endpoint(
+    bid: int, sid: int, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not await get_board_by_id(bid, user["id"]):
+        raise HTTPException(status_code=404, detail="Board not found")
+    if not await delete_sprint(sid, bid):
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    await add_activity(bid, username, "deleted a sprint")
+    return {"ok": True}
+
+
+@app.get("/api/board/cards/{card_id}/sprints")
+async def get_card_sprints_endpoint(card_id: str, board_id: int = Depends(get_board_id)):
+    result = await get_card_sprints(card_id, board_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return result
+
+
+@app.post("/api/board/cards/{card_id}/sprints")
+async def assign_card_sprint_endpoint(
+    card_id: str, body: AssignCardSprintRequest, board_id: int = Depends(get_board_id)
+):
+    result = await assign_card_to_sprint(card_id, body.sprint_id, board_id)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Card or sprint not found")
+    if result == "duplicate":
+        raise HTTPException(status_code=409, detail="Card already in sprint")
+    return {"ok": True}
+
+
+@app.delete("/api/board/cards/{card_id}/sprints/{sprint_id}")
+async def remove_card_sprint_endpoint(
+    card_id: str, sprint_id: int, board_id: int = Depends(get_board_id)
+):
+    if not await remove_card_from_sprint(card_id, sprint_id, board_id):
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return {"ok": True}
 
 
 # --- Columns ---

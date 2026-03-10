@@ -275,6 +275,49 @@ export async function logBoardActivity(boardId: number, action: string): Promise
 
 // --- Archive ---
 
+export interface CardDependencies {
+  blocked_by: { id: string; title: string }[];
+  blocking: { id: string; title: string }[];
+}
+
+export interface DashboardEntry {
+  id: string;
+  title: string;
+  due_date: string;
+  priority: string;
+  column_title: string;
+  board_id: number;
+  board_name: string;
+}
+
+export interface Dashboard {
+  overdue: DashboardEntry[];
+  due_soon: DashboardEntry[];
+  total_overdue: number;
+  total_due_soon: number;
+}
+
+export async function getCardDependencies(cardId: string, boardId?: number): Promise<CardDependencies> {
+  return request<CardDependencies>(`/api/board/cards/${cardId}/dependencies${boardParam(boardId)}`);
+}
+
+export async function addCardDependency(cardId: string, dependsOnId: string, boardId?: number): Promise<void> {
+  await request(`/api/board/cards/${cardId}/dependencies${boardParam(boardId)}`, {
+    method: "POST",
+    body: JSON.stringify({ depends_on_id: dependsOnId }),
+  });
+}
+
+export async function removeCardDependency(cardId: string, dependsOnId: string, boardId?: number): Promise<void> {
+  await request(`/api/board/cards/${cardId}/dependencies/${dependsOnId}${boardParam(boardId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getDashboard(): Promise<Dashboard> {
+  return request<Dashboard>("/api/dashboard");
+}
+
 export async function duplicateCard(
   cardId: string,
   boardId?: number

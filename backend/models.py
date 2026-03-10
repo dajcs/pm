@@ -162,3 +162,7 @@ class BoardMember(BaseModel):
 class CreateBoardFromTemplateRequest(BaseModel):
     name: str = Field(max_length=200)
     template: str = Field(max_length=50)
+
+
+class AddDependencyRequest(BaseModel):
+    depends_on_id: str = Field(min_length=1, max_length=50)

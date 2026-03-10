@@ -55,7 +55,11 @@ from database import (
     save_board,
     set_column_wip_limit,
     update_board_description,
+    add_card_dependency,
+    get_card_dependencies,
+    get_dashboard,
     remove_board_member,
+    remove_card_dependency,
     update_card,
     update_checklist_item,
     update_user_password,
@@ -73,6 +77,7 @@ from models import (
     ChangePasswordRequest,
     ChatRequest,
     Comment,
+    AddDependencyRequest,
     CreateBoardFromTemplateRequest,
     CreateBoardRequest,
     CreateCardRequest,
@@ -467,6 +472,50 @@ async def duplicate_card_endpoint(
         raise HTTPException(status_code=404, detail="Card not found")
     await add_activity(board_id, username, f"duplicated card \"{result['title']}\"")
     return result
+
+
+@app.get("/api/board/cards/{card_id}/dependencies")
+async def get_card_deps_endpoint(
+    card_id: str, board_id: int = Depends(get_board_id)
+):
+    return await get_card_dependencies(card_id, board_id)
+
+
+@app.post("/api/board/cards/{card_id}/dependencies")
+async def add_card_dep_endpoint(
+    card_id: str,
+    body: AddDependencyRequest,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
+    result = await add_card_dependency(card_id, body.depends_on_id, board_id)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Card not found")
+    if result == "self":
+        raise HTTPException(status_code=400, detail="Card cannot depend on itself")
+    if result == "duplicate":
+        raise HTTPException(status_code=409, detail="Dependency already exists")
+    return {"ok": True}
+
+
+@app.delete("/api/board/cards/{card_id}/dependencies/{depends_on_id}")
+async def remove_card_dep_endpoint(
+    card_id: str,
+    depends_on_id: str,
+    board_id: int = Depends(get_board_id),
+):
+    removed = await remove_card_dependency(card_id, depends_on_id, board_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Dependency not found")
+    return {"ok": True}
+
+
+@app.get("/api/dashboard")
+async def dashboard_endpoint(username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return await get_dashboard(user["id"])
 
 
 @app.post("/api/board/cards/{card_id}/archive")

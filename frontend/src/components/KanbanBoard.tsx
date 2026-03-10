@@ -30,6 +30,7 @@ import { ActivityFeed } from "@/components/ActivityFeed";
 import { StatsPanel } from "@/components/StatsPanel";
 import { CardDetailModal } from "@/components/CardDetailModal";
 import { BoardSharePanel } from "@/components/BoardSharePanel";
+import { DashboardPanel } from "@/components/DashboardPanel";
 import { moveCard, moveColumn, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
@@ -82,6 +83,7 @@ export const KanbanBoard = ({
   const [showActivity, setShowActivity] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   const [detailCardId, setDetailCardId] = useState<string | null>(null);
   const [boardMembers, setBoardMembers] = useState<string[]>([]);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -102,6 +104,7 @@ export const KanbanBoard = ({
       setShowActivity(false);
       setShowStats(false);
       setShowShare(false);
+      setShowDashboard(false);
       setDetailCardId(null);
       setAddingColumn(false);
       searchInputRef.current?.blur();
@@ -631,6 +634,13 @@ export const KanbanBoard = ({
           )}
           <div className="ml-auto flex gap-2">
             <button
+              onClick={() => setShowDashboard(true)}
+              className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
+              title="My dashboard"
+            >
+              dashboard
+            </button>
+            <button
               onClick={() => setShowArchive(true)}
               className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
               title="View archived cards"
@@ -790,6 +800,15 @@ export const KanbanBoard = ({
           }}
         />
       )}
+      {showDashboard && (
+        <DashboardPanel
+          onClose={() => setShowDashboard(false)}
+          onNavigateBoard={(bid) => {
+            onBoardSelect?.(bid);
+            setShowDashboard(false);
+          }}
+        />
+      )}
       {showActivity && boardId && (
         <ActivityFeed boardId={boardId} onClose={() => setShowActivity(false)} />
       )}
@@ -802,6 +821,7 @@ export const KanbanBoard = ({
             columnTitle={col?.title ?? ""}
             boardId={boardId}
             boardMembers={boardMembers}
+            allCardTitles={board ? Object.fromEntries(Object.values(board.cards).map((c) => [c.id, c.title])) : undefined}
             onClose={() => setDetailCardId(null)}
             onEdit={handleEditCard}
             onUpdatePriority={handleUpdatePriority}

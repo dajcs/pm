@@ -103,6 +103,14 @@ async def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_board_members_board ON board_members(board_id);
             CREATE INDEX IF NOT EXISTS idx_board_members_user ON board_members(user_id);
+            CREATE TABLE IF NOT EXISTS card_dependencies (
+                id INTEGER PRIMARY KEY,
+                card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                depends_on_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                UNIQUE(card_id, depends_on_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_deps_card ON card_dependencies(card_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_on ON card_dependencies(depends_on_id);
         """)
 
         # Migrations: add new columns if they don't exist
@@ -1102,6 +1110,135 @@ async def export_board(board_id: int) -> dict:
             "columns": [{"id": c["id"], "title": c["title"], "wip_limit": c["wip_limit"]} for c in cols],
             "cards": cards,
             "exported_at": datetime.now(timezone.utc).isoformat(),
+        }
+    finally:
+        await db.close()
+
+
+async def add_card_dependency(card_id: str, depends_on_id: str, board_id: int) -> str:
+    """Add a 'blocked by' dependency. Returns 'ok', 'not_found', 'self', or 'duplicate'."""
+    if card_id == depends_on_id:
+        return "self"
+    db = await get_db()
+    try:
+        # Verify both cards belong to the board
+        rows = await db.execute_fetchall(
+            """SELECT c.id FROM cards c
+               JOIN columns col ON c.column_id = col.id
+               WHERE c.id IN (?, ?) AND col.board_id = ? AND c.archived = 0""",
+            (card_id, depends_on_id, board_id),
+        )
+        if len(rows) < 2:
+            return "not_found"
+        try:
+            await db.execute(
+                "INSERT INTO card_dependencies (card_id, depends_on_id) VALUES (?, ?)",
+                (card_id, depends_on_id),
+            )
+            await db.commit()
+            return "ok"
+        except Exception:
+            return "duplicate"
+    finally:
+        await db.close()
+
+
+async def remove_card_dependency(card_id: str, depends_on_id: str, board_id: int) -> bool:
+    """Remove a dependency. Returns True if removed."""
+    db = await get_db()
+    try:
+        # Verify card belongs to board
+        rows = await db.execute_fetchall(
+            """SELECT c.id FROM cards c JOIN columns col ON c.column_id = col.id
+               WHERE c.id = ? AND col.board_id = ?""",
+            (card_id, board_id),
+        )
+        if not rows:
+            return False
+        cursor = await db.execute(
+            "DELETE FROM card_dependencies WHERE card_id = ? AND depends_on_id = ?",
+            (card_id, depends_on_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def get_card_dependencies(card_id: str, board_id: int) -> dict:
+    """Return {blocked_by: [...], blocking: [...]} for a card."""
+    db = await get_db()
+    try:
+        blocked_by = await db.execute_fetchall(
+            """SELECT c.id, c.title FROM card_dependencies cd
+               JOIN cards c ON cd.depends_on_id = c.id
+               WHERE cd.card_id = ?""",
+            (card_id,),
+        )
+        blocking = await db.execute_fetchall(
+            """SELECT c.id, c.title FROM card_dependencies cd
+               JOIN cards c ON cd.card_id = c.id
+               WHERE cd.depends_on_id = ?""",
+            (card_id,),
+        )
+        return {
+            "blocked_by": [{"id": r["id"], "title": r["title"]} for r in blocked_by],
+            "blocking": [{"id": r["id"], "title": r["title"]} for r in blocking],
+        }
+    finally:
+        await db.close()
+
+
+async def get_dashboard(user_id: int) -> dict:
+    """Return overdue and due-soon cards across all boards the user has access to."""
+    from datetime import date, timedelta
+    db = await get_db()
+    try:
+        today = date.today().isoformat()
+        due_soon = (date.today() + timedelta(days=3)).isoformat()
+
+        # All board IDs accessible to this user (owner or member)
+        board_rows = await db.execute_fetchall(
+            """SELECT DISTINCT b.id, b.name FROM boards b
+               WHERE b.user_id = ?
+               UNION
+               SELECT b.id, b.name FROM boards b
+               JOIN board_members bm ON b.id = bm.board_id
+               WHERE bm.user_id = ?""",
+            (user_id, user_id),
+        )
+
+        overdue_cards = []
+        due_soon_cards = []
+
+        for board in board_rows:
+            rows = await db.execute_fetchall(
+                """SELECT c.id, c.title, c.due_date, c.priority, col.title as column_title
+                   FROM cards c
+                   JOIN columns col ON c.column_id = col.id
+                   WHERE col.board_id = ? AND c.archived = 0 AND c.due_date IS NOT NULL""",
+                (board["id"],),
+            )
+            for r in rows:
+                entry = {
+                    "id": r["id"],
+                    "title": r["title"],
+                    "due_date": r["due_date"],
+                    "priority": r["priority"] or "none",
+                    "column_title": r["column_title"],
+                    "board_id": board["id"],
+                    "board_name": board["name"],
+                }
+                if r["due_date"] < today:
+                    overdue_cards.append(entry)
+                elif r["due_date"] <= due_soon:
+                    due_soon_cards.append(entry)
+
+        return {
+            "overdue": sorted(overdue_cards, key=lambda x: x["due_date"]),
+            "due_soon": sorted(due_soon_cards, key=lambda x: x["due_date"]),
+            "total_overdue": len(overdue_cards),
+            "total_due_soon": len(due_soon_cards),
         }
     finally:
         await db.close()

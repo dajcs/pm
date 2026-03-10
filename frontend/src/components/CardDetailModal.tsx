@@ -5,6 +5,7 @@ import clsx from "clsx";
 import type { Card } from "@/lib/kanban";
 import { ChecklistPanel } from "@/components/ChecklistPanel";
 import { CommentsPanel } from "@/components/CommentsPanel";
+import { DependenciesPanel } from "@/components/DependenciesPanel";
 
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
 const PRIORITY_STYLES: Record<string, { dot: string }> = {
@@ -29,6 +30,7 @@ type CardDetailModalProps = {
   columnTitle: string;
   boardId?: number;
   boardMembers?: string[];
+  allCardTitles?: Record<string, string>;
   onClose: () => void;
   onEdit: (cardId: string, title: string, details: string) => void;
   onUpdatePriority?: (cardId: string, priority: string) => void;
@@ -46,6 +48,7 @@ export const CardDetailModal = ({
   columnTitle,
   boardId,
   boardMembers,
+  allCardTitles,
   onClose,
   onEdit,
   onUpdatePriority,
@@ -282,6 +285,14 @@ export const CardDetailModal = ({
               boardId={boardId}
               onCountChange={(total, done) => onChecklistCountChange?.(card.id, total, done)}
             />
+          </div>
+
+          {/* Dependencies */}
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--gray-text)] mb-2">
+              Dependencies
+            </div>
+            <DependenciesPanel cardId={card.id} boardId={boardId} allCardTitles={allCardTitles} />
           </div>
 
           {/* Comments */}

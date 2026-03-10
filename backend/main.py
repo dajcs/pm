@@ -18,6 +18,8 @@ from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
 from database import (
     add_activity,
     export_board,
+    list_board_members,
+    search_cards,
     add_checklist_item,
     add_column,
     add_comment,
@@ -273,6 +275,25 @@ async def log_board_activity(
         raise HTTPException(status_code=404, detail="Board not found")
     await add_activity(bid, username, body.action)
     return {"ok": True}
+
+
+@app.get("/api/board/search")
+async def search_cards_endpoint(
+    q: str = Query(min_length=1, max_length=200),
+    board_id: int = Depends(get_board_id),
+):
+    return await search_cards(board_id, q)
+
+
+@app.get("/api/boards/{bid}/members")
+async def board_members_endpoint(bid: int, username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    verified = await get_board_by_id(bid, user["id"])
+    if verified is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return await list_board_members(bid)
 
 
 @app.get("/api/boards/{bid}/export")

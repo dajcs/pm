@@ -16,6 +16,7 @@ class Card(BaseModel):
     checklist_total: int = 0
     checklist_done: int = 0
     comment_count: int = 0
+    assigned_to: str | None = None
 
 
 class ChecklistItem(BaseModel):
@@ -59,6 +60,7 @@ class UpdateCardRequest(BaseModel):
     due_date: str | None = None
     priority: str | None = None
     labels: list[str] | None = None
+    assigned_to: str | None = None
 
 
 class SetWipLimitRequest(BaseModel):

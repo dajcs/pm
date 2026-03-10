@@ -38,6 +38,7 @@ export type Card = {
   checklist_total?: number;
   checklist_done?: number;
   comment_count?: number;
+  assigned_to?: string | null;
 };
 
 export type Column = {

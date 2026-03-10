@@ -16,6 +16,8 @@ vi.mock("@/lib/api", () => ({
   addColumn: vi.fn(),
   deleteColumn: vi.fn(),
   setAuthErrorHandler: vi.fn(),
+  getBoardMembers: vi.fn().mockResolvedValue([]),
+  logBoardActivity: vi.fn().mockResolvedValue(undefined),
 }));
 
 const renderBoard = () =>

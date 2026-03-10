@@ -103,6 +103,7 @@ async def init_db() -> None:
             "ALTER TABLE cards ADD COLUMN labels TEXT NOT NULL DEFAULT '[]'",
             "ALTER TABLE columns ADD COLUMN wip_limit INTEGER",
             "ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE cards ADD COLUMN assigned_to TEXT",
         ]:
             try:
                 await db.execute(migration_sql)
@@ -181,7 +182,7 @@ async def load_board(board_id: int) -> dict:
         )
         card_rows = await db.execute_fetchall(
             """SELECT cards.id, cards.column_id, cards.title, cards.details,
-                      cards.due_date, cards.priority, cards.labels
+                      cards.due_date, cards.priority, cards.labels, cards.assigned_to
                FROM cards
                JOIN columns ON cards.column_id = columns.id
                WHERE columns.board_id = ? AND cards.archived = 0
@@ -231,6 +232,7 @@ async def load_board(board_id: int) -> dict:
                 "checklist_total": summary["total"],
                 "checklist_done": summary["done"],
                 "comment_count": comment_counts.get(card_id, 0),
+                "assigned_to": card["assigned_to"],
             }
             if col_id in cards_by_col:
                 cards_by_col[col_id].append(card_id)
@@ -263,7 +265,7 @@ async def save_board(board_id: int, data: dict) -> None:
                 card = data["cards"].get(card_id)
                 if card:
                     await db.execute(
-                        "INSERT INTO cards (id, column_id, title, details, position, due_date, priority, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO cards (id, column_id, title, details, position, due_date, priority, labels, assigned_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             card["id"], col["id"], card["title"],
                             card.get("details", "No details yet."),
@@ -271,6 +273,7 @@ async def save_board(board_id: int, data: dict) -> None:
                             card.get("due_date"),
                             card.get("priority", "none"),
                             _json.dumps(card.get("labels", [])),
+                            card.get("assigned_to"),
                         ),
                     )
         await db.commit()
@@ -402,6 +405,7 @@ async def update_card(card_id: str, board_id: int, updates: dict) -> bool:
             "details": "details",
             "due_date": "due_date",
             "priority": "priority",
+            "assigned_to": "assigned_to",
         }
         fields, values = [], []
         for key, col in field_map.items():
@@ -801,6 +805,62 @@ async def get_activity(board_id: int, limit: int = 50) -> list[dict]:
             (board_id, limit),
         )
         return [{"id": r["id"], "username": r["username"], "action": r["action"], "created_at": r["created_at"]} for r in rows]
+    finally:
+        await db.close()
+
+
+async def search_cards(board_id: int, query: str) -> list[dict]:
+    """Full-text search across card title, details, and comments. Returns matching card ids."""
+    db = await get_db()
+    try:
+        q = f"%{query.lower()}%"
+        rows = await db.execute_fetchall(
+            """SELECT DISTINCT cards.id
+               FROM cards
+               JOIN columns ON cards.column_id = columns.id
+               WHERE columns.board_id = ? AND cards.archived = 0
+               AND (
+                   LOWER(cards.title) LIKE ? OR
+                   LOWER(cards.details) LIKE ? OR
+                   EXISTS (
+                       SELECT 1 FROM comments
+                       WHERE comments.card_id = cards.id
+                       AND LOWER(comments.text) LIKE ?
+                   )
+               )""",
+            (board_id, q, q, q),
+        )
+        return [r["id"] for r in rows]
+    finally:
+        await db.close()
+
+
+async def list_board_members(board_id: int) -> list[str]:
+    """Return usernames of all users who have ever commented or been assigned on this board."""
+    db = await get_db()
+    try:
+        # Board owner
+        owner_rows = await db.execute_fetchall(
+            "SELECT u.username FROM users u JOIN boards b ON b.user_id = u.id WHERE b.id = ?",
+            (board_id,),
+        )
+        owner = {r["username"] for r in owner_rows}
+        # Commenters
+        commenter_rows = await db.execute_fetchall(
+            """SELECT DISTINCT cm.username FROM comments cm
+               JOIN cards c ON cm.card_id = c.id
+               JOIN columns col ON c.column_id = col.id
+               WHERE col.board_id = ?""",
+            (board_id,),
+        )
+        commenters = {r["username"] for r in commenter_rows}
+        # Activity actors
+        actor_rows = await db.execute_fetchall(
+            "SELECT DISTINCT username FROM activity_log WHERE board_id = ?",
+            (board_id,),
+        )
+        actors = {r["username"] for r in actor_rows}
+        return sorted(owner | commenters | actors)
     finally:
         await db.close()
 

@@ -17,6 +17,8 @@ type KanbanCardProps = {
   onUpdateLabels?: (cardId: string, labels: string[]) => void;
   onChecklistCountChange?: (cardId: string, total: number, done: number) => void;
   onCommentCountChange?: (cardId: string, count: number) => void;
+  onAssign?: (cardId: string, username: string | null) => void;
+  boardMembers?: string[];
 };
 
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
@@ -50,11 +52,12 @@ function getDueDateStyle(dueDate: string | null | undefined): string {
   return "text-[var(--gray-text)]";
 }
 
-export const KanbanCard = ({ card, boardId, onDelete, onArchive, onEdit, onUpdatePriority, onUpdateDueDate, onUpdateLabels, onChecklistCountChange, onCommentCountChange }: KanbanCardProps) => {
+export const KanbanCard = ({ card, boardId, onDelete, onArchive, onEdit, onUpdatePriority, onUpdateDueDate, onUpdateLabels, onChecklistCountChange, onCommentCountChange, onAssign, boardMembers }: KanbanCardProps) => {
   const [editingField, setEditingField] = useState<"title" | "details" | "due_date" | null>(null);
   const [showLabels, setShowLabels] = useState(false);
   const [showChecklist, setShowChecklist] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showAssign, setShowAssign] = useState(false);
   const [editTitle, setEditTitle] = useState(card.title);
   const [editDetails, setEditDetails] = useState(card.details);
   const [editDueDate, setEditDueDate] = useState(card.due_date ?? "");
@@ -278,6 +281,44 @@ export const KanbanCard = ({ card, boardId, onDelete, onArchive, onEdit, onUpdat
             >
               {(card.comment_count ?? 0) > 0 ? `${card.comment_count} msg` : "msg"}
             </button>
+            {onAssign && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setShowAssign((v) => !v); }}
+                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${card.assigned_to ? "border-[var(--secondary-purple)] text-[var(--secondary-purple)]" : "border-[var(--stroke)] text-[var(--gray-text)] hover:border-[var(--secondary-purple)]"}`}
+                  title="Assign card"
+                >
+                  {card.assigned_to ? `@${card.assigned_to}` : "assign"}
+                </button>
+                {showAssign && (
+                  <div
+                    className="absolute bottom-full left-0 z-20 mb-1 rounded-xl border border-[var(--stroke)] bg-white shadow-[var(--shadow)] p-1 min-w-[120px]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {card.assigned_to && (
+                      <button
+                        type="button"
+                        onClick={() => { onAssign(card.id, null); setShowAssign(false); }}
+                        className="w-full rounded-lg px-2 py-1 text-left text-xs text-red-500 hover:bg-red-50"
+                      >
+                        Unassign
+                      </button>
+                    )}
+                    {(boardMembers ?? []).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => { onAssign(card.id, m); setShowAssign(false); }}
+                        className={`w-full rounded-lg px-2 py-1 text-left text-xs hover:bg-[var(--surface)] ${card.assigned_to === m ? "font-semibold text-[var(--secondary-purple)]" : "text-[var(--navy-dark)]"}`}
+                      >
+                        @{m}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {editingField === "due_date" ? (
               <input
                 type="date"

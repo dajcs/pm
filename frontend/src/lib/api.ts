@@ -78,7 +78,7 @@ export async function deleteCard(cardId: string, boardId?: number): Promise<void
 
 export async function updateCard(
   cardId: string,
-  fields: { title?: string; details?: string; due_date?: string | null; priority?: string; labels?: string[] },
+  fields: { title?: string; details?: string; due_date?: string | null; priority?: string; labels?: string[]; assigned_to?: string | null },
   boardId?: number
 ): Promise<void> {
   await request(`/api/board/cards/${cardId}${boardParam(boardId)}`, {
@@ -203,6 +203,17 @@ export async function deleteChecklistItem(
   await request(`/api/board/cards/${cardId}/checklist/${itemId}${boardParam(boardId)}`, {
     method: "DELETE",
   });
+}
+
+// --- Search & Members ---
+
+export async function searchCards(query: string, boardId?: number): Promise<string[]> {
+  const bp = boardId ? `&board_id=${boardId}` : "";
+  return request<string[]>(`/api/board/search?q=${encodeURIComponent(query)}${bp}`);
+}
+
+export async function getBoardMembers(boardId: number): Promise<string[]> {
+  return request<string[]>(`/api/boards/${boardId}/members`);
 }
 
 // --- Export ---

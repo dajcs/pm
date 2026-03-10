@@ -24,6 +24,8 @@ type KanbanColumnProps = {
   onChecklistCountChange?: (cardId: string, total: number, done: number) => void;
   onCommentCountChange?: (cardId: string, count: number) => void;
   onRegisterAddTrigger?: (trigger: () => void) => void;
+  onAssign?: (cardId: string, username: string | null) => void;
+  boardMembers?: string[];
 };
 
 export const KanbanColumn = ({
@@ -44,6 +46,8 @@ export const KanbanColumn = ({
   onCommentCountChange,
   onArchiveCard,
   onRegisterAddTrigger,
+  onAssign,
+  boardMembers,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
@@ -159,6 +163,8 @@ export const KanbanColumn = ({
               onUpdateLabels={onUpdateLabels}
               onChecklistCountChange={onChecklistCountChange}
               onCommentCountChange={onCommentCountChange}
+              onAssign={onAssign}
+              boardMembers={boardMembers}
             />
           ))}
         </SortableContext>

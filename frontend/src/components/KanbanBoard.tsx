@@ -77,6 +77,7 @@ export const KanbanBoard = ({
   const [showAccount, setShowAccount] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
+  const [boardMembers, setBoardMembers] = useState<string[]>([]);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const firstAddCardRef = useRef<(() => void) | null>(null);
@@ -132,6 +133,12 @@ export const KanbanBoard = ({
       cancelled = true;
     };
   }, [initialBoard, boardId, showError]);
+
+  // Fetch board members when boardId is known
+  useEffect(() => {
+    if (!boardId) return;
+    api.getBoardMembers(boardId).then(setBoardMembers).catch(() => {});
+  }, [boardId]);
 
   // Apply external board update in-place (avoids full remount)
   useEffect(() => {
@@ -353,6 +360,21 @@ export const KanbanBoard = ({
       const card = prev.cards[cardId];
       if (!card) return prev;
       return { ...prev, cards: { ...prev.cards, [cardId]: { ...card, checklist_total: total, checklist_done: done } } };
+    });
+  };
+
+  const handleAssign = (cardId: string, username: string | null) => {
+    if (!board) return;
+    const prev = board;
+    setBoard((b) => {
+      if (!b) return b;
+      const card = b.cards[cardId];
+      if (!card) return b;
+      return { ...b, cards: { ...b.cards, [cardId]: { ...card, assigned_to: username } } };
+    });
+    api.updateCard(cardId, { assigned_to: username }, boardId).catch((err) => {
+      setBoard(prev);
+      showError(err.message);
     });
   };
 
@@ -620,6 +642,8 @@ export const KanbanBoard = ({
                   onSetWipLimit={handleSetWipLimit}
                   onChecklistCountChange={handleChecklistCountChange}
                   onCommentCountChange={handleCommentCountChange}
+                  onAssign={handleAssign}
+                  boardMembers={boardMembers}
                   onRegisterAddTrigger={idx === 0 ? (fn) => { firstAddCardRef.current = fn; } : undefined}
                 />
               ))}

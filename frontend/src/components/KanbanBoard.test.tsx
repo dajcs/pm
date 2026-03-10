@@ -19,6 +19,7 @@ vi.mock("@/lib/api", () => ({
   getBoardMembers: vi.fn().mockResolvedValue([]),
   logBoardActivity: vi.fn().mockResolvedValue(undefined),
   archiveColumnCards: vi.fn().mockResolvedValue({ archived_count: 0 }),
+  duplicateCard: vi.fn().mockResolvedValue({ id: "card-dup", title: "Copy (copy)", details: "d", priority: "none", labels: [], column_id: "col-backlog" }),
   getBoardStats: vi.fn().mockResolvedValue({
     total_cards: 0, cards_by_column: {}, overdue_count: 0,
     cards_by_priority: {}, due_soon_count: 0, assigned_count: 0, unassigned_count: 0,

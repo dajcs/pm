@@ -312,6 +312,46 @@ async def create_card(board_id: int, column_id: str, title: str, details: str, d
         await db.close()
 
 
+async def duplicate_card(card_id: str, board_id: int) -> dict | None:
+    """Duplicate a card in the same column. Returns new card data or None if not found."""
+    import json as _json
+    db = await get_db()
+    try:
+        row = await db.execute_fetchall(
+            """SELECT c.id, c.column_id, c.title, c.details, c.due_date, c.priority, c.labels, c.assigned_to
+               FROM cards c
+               JOIN columns col ON c.column_id = col.id
+               WHERE c.id = ? AND col.board_id = ? AND c.archived = 0""",
+            (card_id, board_id),
+        )
+        if not row:
+            return None
+        src = row[0]
+        cursor = await db.execute(
+            "SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM cards WHERE column_id = ?",
+            (src["column_id"],),
+        )
+        position = (await cursor.fetchone())["next_pos"]
+        new_id = f"card-{uuid.uuid4().hex[:8]}"
+        new_title = f"{src['title']} (copy)"
+        await db.execute(
+            "INSERT INTO cards (id, column_id, title, details, position, due_date, priority, labels, assigned_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (new_id, src["column_id"], new_title, src["details"], position, src["due_date"], src["priority"], src["labels"] or "[]", src["assigned_to"]),
+        )
+        await db.commit()
+        return {
+            "id": new_id,
+            "title": new_title,
+            "details": src["details"],
+            "due_date": src["due_date"],
+            "priority": src["priority"],
+            "labels": _json.loads(src["labels"] or "[]"),
+            "column_id": src["column_id"],
+        }
+    finally:
+        await db.close()
+
+
 async def delete_card(card_id: str, board_id: int) -> bool:
     """Delete card if it belongs to the board. Returns True if deleted, False if not found."""
     db = await get_db()

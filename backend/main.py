@@ -25,6 +25,7 @@ from database import (
     add_comment,
     archive_card,
     archive_column_cards,
+    duplicate_card,
     create_board,
     create_card,
     create_user,
@@ -363,6 +364,19 @@ async def delete_card_endpoint(
         raise HTTPException(status_code=404, detail="Card not found")
     await add_activity(board_id, username, "permanently deleted a card")
     return {"ok": True}
+
+
+@app.post("/api/board/cards/{card_id}/duplicate")
+async def duplicate_card_endpoint(
+    card_id: str,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
+    result = await duplicate_card(card_id, board_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    await add_activity(board_id, username, f"duplicated card \"{result['title']}\"")
+    return result
 
 
 @app.post("/api/board/cards/{card_id}/archive")

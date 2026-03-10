@@ -51,6 +51,7 @@ type KanbanColumnProps = {
   onAssign?: (cardId: string, username: string | null) => void;
   boardMembers?: string[];
   onBulkArchive?: (columnId: string) => void;
+  onOpenCardDetail?: (cardId: string) => void;
 };
 
 export const KanbanColumn = ({
@@ -74,6 +75,7 @@ export const KanbanColumn = ({
   onAssign,
   boardMembers,
   onBulkArchive,
+  onOpenCardDetail,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
@@ -217,6 +219,7 @@ export const KanbanColumn = ({
               onCommentCountChange={onCommentCountChange}
               onAssign={onAssign}
               boardMembers={boardMembers}
+              onOpenDetail={onOpenCardDetail}
             />
           ))}
         </SortableContext>

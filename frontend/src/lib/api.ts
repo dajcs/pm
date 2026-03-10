@@ -235,6 +235,13 @@ export async function logBoardActivity(boardId: number, action: string): Promise
 
 // --- Archive ---
 
+export async function duplicateCard(
+  cardId: string,
+  boardId?: number
+): Promise<{ id: string; title: string; details: string; due_date?: string | null; priority: string; labels: string[]; column_id: string }> {
+  return request(`/api/board/cards/${cardId}/duplicate${boardParam(boardId)}`, { method: "POST" });
+}
+
 export async function archiveCard(cardId: string, boardId?: number): Promise<void> {
   await request(`/api/board/cards/${cardId}/archive${boardParam(boardId)}`, { method: "POST" });
 }

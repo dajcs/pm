@@ -28,6 +28,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { ArchivePanel } from "@/components/ArchivePanel";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { StatsPanel } from "@/components/StatsPanel";
+import { CardDetailModal } from "@/components/CardDetailModal";
 import { moveCard, moveColumn, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
@@ -79,6 +80,7 @@ export const KanbanBoard = ({
   const [showArchive, setShowArchive] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [detailCardId, setDetailCardId] = useState<string | null>(null);
   const [boardMembers, setBoardMembers] = useState<string[]>([]);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -97,6 +99,7 @@ export const KanbanBoard = ({
       setShowArchive(false);
       setShowActivity(false);
       setShowStats(false);
+      setDetailCardId(null);
       setAddingColumn(false);
       searchInputRef.current?.blur();
     },
@@ -122,6 +125,22 @@ export const KanbanBoard = ({
       setBoard(prev);
       showError(err.message);
     });
+  };
+
+  const handleDuplicateCard = (cardId: string) => {
+    if (!board) return;
+    api.duplicateCard(cardId, boardId).then((dup) => {
+      setBoard((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          cards: { ...prev.cards, [dup.id]: { id: dup.id, title: dup.title, details: dup.details, due_date: dup.due_date, priority: dup.priority, labels: dup.labels } },
+          columns: prev.columns.map((col) =>
+            col.id === dup.column_id ? { ...col, cardIds: [...col.cardIds, dup.id] } : col
+          ),
+        };
+      });
+    }).catch((err) => showError(err.message));
   };
 
   const handleExport = () => {
@@ -676,6 +695,7 @@ export const KanbanBoard = ({
                   onAssign={handleAssign}
                   boardMembers={boardMembers}
                   onBulkArchive={boardId ? handleBulkArchive : undefined}
+                  onOpenCardDetail={(cardId) => setDetailCardId(cardId)}
                   onRegisterAddTrigger={idx === 0 ? (fn) => { firstAddCardRef.current = fn; } : undefined}
                 />
               ))}
@@ -760,6 +780,28 @@ export const KanbanBoard = ({
       {showActivity && boardId && (
         <ActivityFeed boardId={boardId} onClose={() => setShowActivity(false)} />
       )}
+      {detailCardId && board?.cards[detailCardId] && (() => {
+        const card = board.cards[detailCardId];
+        const col = board.columns.find((c) => c.cardIds.includes(detailCardId));
+        return (
+          <CardDetailModal
+            card={card}
+            columnTitle={col?.title ?? ""}
+            boardId={boardId}
+            boardMembers={boardMembers}
+            onClose={() => setDetailCardId(null)}
+            onEdit={handleEditCard}
+            onUpdatePriority={handleUpdatePriority}
+            onUpdateDueDate={handleUpdateDueDate}
+            onUpdateLabels={handleUpdateLabels}
+            onAssign={handleAssign}
+            onChecklistCountChange={handleChecklistCountChange}
+            onCommentCountChange={handleCommentCountChange}
+            onArchive={(cardId) => { handleArchiveCard(col?.id ?? "", cardId); setDetailCardId(null); }}
+            onDuplicate={handleDuplicateCard}
+          />
+        );
+      })()}
     </div>
   );
 };

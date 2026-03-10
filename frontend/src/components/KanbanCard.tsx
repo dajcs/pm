@@ -19,6 +19,7 @@ type KanbanCardProps = {
   onCommentCountChange?: (cardId: string, count: number) => void;
   onAssign?: (cardId: string, username: string | null) => void;
   boardMembers?: string[];
+  onOpenDetail?: (cardId: string) => void;
 };
 
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
@@ -53,7 +54,7 @@ function getDueDateInfo(dueDate: string | null | undefined): { style: string; ba
   return { style: "text-[var(--gray-text)]" };
 }
 
-export const KanbanCard = ({ card, boardId, onDelete, onArchive, onEdit, onUpdatePriority, onUpdateDueDate, onUpdateLabels, onChecklistCountChange, onCommentCountChange, onAssign, boardMembers }: KanbanCardProps) => {
+export const KanbanCard = ({ card, boardId, onDelete, onArchive, onEdit, onUpdatePriority, onUpdateDueDate, onUpdateLabels, onChecklistCountChange, onCommentCountChange, onAssign, boardMembers, onOpenDetail }: KanbanCardProps) => {
   const [editingField, setEditingField] = useState<"title" | "details" | "due_date" | null>(null);
   const [showLabels, setShowLabels] = useState(false);
   const [showChecklist, setShowChecklist] = useState(false);
@@ -130,30 +131,45 @@ export const KanbanCard = ({ card, boardId, onDelete, onArchive, onEdit, onUpdat
       data-testid={`card-${card.id}`}
     >
       <div className="relative">
-        {onArchive ? (
-          <button
-            type="button"
-            onClick={() => onArchive(card.id)}
-            className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--stroke)] bg-white text-[var(--gray-text)] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-[var(--surface)]"
-            aria-label={`Archive ${card.title}`}
-            title="Archive card"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-              <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h11A1.5 1.5 0 0 1 15 3.5v1A1.5 1.5 0 0 1 13.5 6H13v6.5A1.5 1.5 0 0 1 11.5 14h-7A1.5 1.5 0 0 1 3 12.5V6h-.5A1.5 1.5 0 0 1 1 4.5v-1ZM6.5 9a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1h-3Z" />
-            </svg>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onDelete(card.id)}
-            className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border border-red-200 bg-white text-red-500 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-red-50"
-            aria-label={`Delete ${card.title}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-              <path d="M4.28 3.22a.75.75 0 0 0-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06L8 9.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L9.06 8l3.72-3.72a.75.75 0 0 0-1.06-1.06L8 6.94 4.28 3.22Z" />
-            </svg>
-          </button>
-        )}
+        <div className="absolute -right-2 -top-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onOpenDetail && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenDetail(card.id); }}
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-[var(--stroke)] bg-white text-[var(--primary-blue)] shadow-sm hover:bg-[var(--surface)]"
+              aria-label={`Open detail ${card.title}`}
+              title="Open card detail"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                <path d="M2.5 3.5A1.5 1.5 0 0 1 4 2h8a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 12 14H4a1.5 1.5 0 0 1-1.5-1.5v-9ZM4 4.5v1h8v-1H4Zm0 2.5v1h5V7H4Zm0 2.5v1h3v-1H4Z" />
+              </svg>
+            </button>
+          )}
+          {onArchive ? (
+            <button
+              type="button"
+              onClick={() => onArchive(card.id)}
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-[var(--stroke)] bg-white text-[var(--gray-text)] shadow-sm hover:bg-[var(--surface)]"
+              aria-label={`Archive ${card.title}`}
+              title="Archive card"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h11A1.5 1.5 0 0 1 15 3.5v1A1.5 1.5 0 0 1 13.5 6H13v6.5A1.5 1.5 0 0 1 11.5 14h-7A1.5 1.5 0 0 1 3 12.5V6h-.5A1.5 1.5 0 0 1 1 4.5v-1ZM6.5 9a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1h-3Z" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onDelete(card.id)}
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-red-200 bg-white text-red-500 shadow-sm hover:bg-red-50"
+              aria-label={`Delete ${card.title}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                <path d="M4.28 3.22a.75.75 0 0 0-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06L8 9.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L9.06 8l3.72-3.72a.75.75 0 0 0-1.06-1.06L8 6.94 4.28 3.22Z" />
+              </svg>
+            </button>
+          )}
+        </div>
         <div className="min-w-0">
           {editingField === "title" ? (
             <input

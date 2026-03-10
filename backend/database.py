@@ -139,6 +139,18 @@ async def init_db() -> None:
                 PRIMARY KEY (card_id, sprint_id)
             );
             CREATE INDEX IF NOT EXISTS idx_card_sprint_sprint ON card_sprint(sprint_id);
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                board_id INTEGER REFERENCES boards(id) ON DELETE CASCADE,
+                card_id TEXT REFERENCES cards(id) ON DELETE CASCADE,
+                read INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id);
+            CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(user_id, read);
         """)
 
         # Migrations: add new columns if they don't exist
@@ -1434,6 +1446,88 @@ async def get_card_sprints(card_id: str, board_id: int) -> list[dict] | None:
             (card_id, board_id),
         )
         return [{"id": r["id"], "name": r["name"], "status": r["status"]} for r in rows]
+    finally:
+        await db.close()
+
+
+async def create_notification(user_id: int, notif_type: str, message: str, board_id: int | None, card_id: str | None) -> None:
+    """Insert a notification for a user."""
+    db = await get_db()
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        await db.execute(
+            "INSERT INTO notifications (user_id, type, message, board_id, card_id, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+            (user_id, notif_type, message, board_id, card_id, now),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_notifications(user_id: int, unread_only: bool = False) -> list[dict]:
+    """Return notifications for a user (most recent first)."""
+    db = await get_db()
+    try:
+        where = "WHERE n.user_id = ?"
+        params: list = [user_id]
+        if unread_only:
+            where += " AND n.read = 0"
+        rows = await db.execute_fetchall(
+            f"""SELECT n.id, n.type, n.message, n.board_id, n.card_id, n.read, n.created_at
+               FROM notifications n {where}
+               ORDER BY n.created_at DESC LIMIT 50""",
+            params,
+        )
+        return [{"id": r["id"], "type": r["type"], "message": r["message"],
+                 "board_id": r["board_id"], "card_id": r["card_id"],
+                 "read": bool(r["read"]), "created_at": r["created_at"]} for r in rows]
+    finally:
+        await db.close()
+
+
+async def mark_notifications_read(user_id: int, notification_ids: list[int] | None = None) -> int:
+    """Mark notifications as read. If ids is None, marks all. Returns count updated."""
+    db = await get_db()
+    try:
+        if notification_ids is None:
+            cursor = await db.execute(
+                "UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0", (user_id,)
+            )
+        else:
+            if not notification_ids:
+                return 0
+            placeholders = ",".join("?" * len(notification_ids))
+            cursor = await db.execute(
+                f"UPDATE notifications SET read = 1 WHERE user_id = ? AND id IN ({placeholders}) AND read = 0",
+                [user_id] + notification_ids,
+            )
+        await db.commit()
+        return cursor.rowcount
+    finally:
+        await db.close()
+
+
+async def get_unread_count(user_id: int) -> int:
+    """Return count of unread notifications for a user."""
+    db = await get_db()
+    try:
+        rows = await db.execute_fetchall(
+            "SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ? AND read = 0", (user_id,)
+        )
+        return rows[0]["cnt"]
+    finally:
+        await db.close()
+
+
+async def delete_notification(user_id: int, notification_id: int) -> bool:
+    """Delete a notification. Returns True if deleted."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "DELETE FROM notifications WHERE id = ? AND user_id = ?", (notification_id, user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
     finally:
         await db.close()
 

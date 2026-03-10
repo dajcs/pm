@@ -26,6 +26,7 @@ async def _reset_db():
     db = await database.get_db()
     try:
         await db.executescript("""
+            DROP TABLE IF EXISTS notifications;
             DROP TABLE IF EXISTS card_sprint;
             DROP TABLE IF EXISTS sprints;
             DROP TABLE IF EXISTS time_entries;

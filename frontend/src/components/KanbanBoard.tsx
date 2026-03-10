@@ -32,6 +32,7 @@ import { CardDetailModal } from "@/components/CardDetailModal";
 import { BoardSharePanel } from "@/components/BoardSharePanel";
 import { DashboardPanel } from "@/components/DashboardPanel";
 import { SprintPanel } from "@/components/SprintPanel";
+import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { moveCard, moveColumn, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
@@ -86,6 +87,8 @@ export const KanbanBoard = ({
   const [showShare, setShowShare] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showSprints, setShowSprints] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [detailCardId, setDetailCardId] = useState<string | null>(null);
   const [boardMembers, setBoardMembers] = useState<string[]>([]);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -98,6 +101,16 @@ export const KanbanBoard = ({
     errorTimer.current = setTimeout(() => setError(null), 4000);
   }, []);
 
+  useEffect(() => {
+    if (!initialBoard) {
+      api.getUnreadCount().then(setUnreadCount).catch(() => {});
+      const interval = setInterval(() => {
+        api.getUnreadCount().then(setUnreadCount).catch(() => {});
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [initialBoard]);
+
   useKeyboardShortcuts({
     onFocusSearch: () => searchInputRef.current?.focus(),
     onEscape: () => {
@@ -108,6 +121,7 @@ export const KanbanBoard = ({
       setShowShare(false);
       setShowDashboard(false);
       setShowSprints(false);
+      setShowNotifications(false);
       setDetailCardId(null);
       setAddingColumn(false);
       searchInputRef.current?.blur();
@@ -637,6 +651,18 @@ export const KanbanBoard = ({
           )}
           <div className="ml-auto flex gap-2">
             <button
+              onClick={() => { setShowNotifications(true); setUnreadCount(0); }}
+              className="relative rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
+              title="Notifications"
+            >
+              notifications
+              {unreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 rounded-full bg-[var(--primary-blue)] px-1.5 py-0.5 text-[9px] font-bold text-white leading-none">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setShowDashboard(true)}
               className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
               title="My dashboard"
@@ -823,6 +849,12 @@ export const KanbanBoard = ({
       )}
       {showSprints && boardId && (
         <SprintPanel boardId={boardId} onClose={() => setShowSprints(false)} />
+      )}
+      {showNotifications && (
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
+          onNavigateBoard={(bid) => { onBoardSelect?.(bid); setShowNotifications(false); }}
+        />
       )}
       {showActivity && boardId && (
         <ActivityFeed boardId={boardId} onClose={() => setShowActivity(false)} />

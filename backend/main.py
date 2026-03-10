@@ -76,6 +76,11 @@ from database import (
     assign_card_to_sprint,
     remove_card_from_sprint,
     get_card_sprints,
+    create_notification,
+    get_notifications,
+    mark_notifications_read,
+    get_unread_count,
+    delete_notification,
 )
 from models import (
     ActivityEntry,
@@ -96,6 +101,8 @@ from models import (
     CreateSprintRequest,
     UpdateSprintRequest,
     AssignCardSprintRequest,
+    Notification,
+    MarkReadRequest,
     CreateBoardFromTemplateRequest,
     CreateBoardRequest,
     CreateCardRequest,
@@ -579,7 +586,8 @@ async def archive_column_cards_endpoint(
 
 @app.patch("/api/board/cards/{card_id}")
 async def patch_card(
-    card_id: str, body: UpdateCardRequest, board_id: int = Depends(get_board_id)
+    card_id: str, body: UpdateCardRequest, board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
 ):
     updates = body.model_dump(exclude_unset=True)
     if "title" in updates and updates["title"] is None:
@@ -588,6 +596,16 @@ async def patch_card(
         updates.pop("details")
     if not await update_card(card_id, board_id, updates):
         raise HTTPException(status_code=404, detail="Card not found")
+    # Notify the assignee if assigned_to changed to a different user
+    assigned_to = updates.get("assigned_to")
+    if assigned_to and assigned_to != username:
+        assignee = await get_user_by_username(assigned_to)
+        if assignee:
+            await create_notification(
+                assignee["id"], "assignment",
+                f"{username} assigned you to a card",
+                board_id, card_id,
+            )
     return {"ok": True}
 
 
@@ -652,6 +670,18 @@ async def add_comment_endpoint(
     comment_id = await add_comment(card_id, board_id, username, body.text)
     if comment_id is None:
         raise HTTPException(status_code=404, detail="Card not found")
+    # Notify mentioned users (@username pattern)
+    import re as _re
+    mentions = set(_re.findall(r"@(\w+)", body.text))
+    for mentioned in mentions:
+        if mentioned != username:
+            mentioned_user = await get_user_by_username(mentioned)
+            if mentioned_user:
+                await create_notification(
+                    mentioned_user["id"], "mention",
+                    f"{username} mentioned you in a comment",
+                    board_id, card_id,
+                )
     from datetime import datetime, timezone
     return {"id": comment_id, "username": username, "text": body.text, "created_at": datetime.now(timezone.utc).isoformat()}
 
@@ -825,6 +855,49 @@ async def remove_card_sprint_endpoint(
 ):
     if not await remove_card_from_sprint(card_id, sprint_id, board_id):
         raise HTTPException(status_code=404, detail="Assignment not found")
+    return {"ok": True}
+
+
+# --- Notifications ---
+
+
+@app.get("/api/notifications")
+async def get_notifications_endpoint(
+    unread_only: bool = False,
+    username: str = Depends(get_current_user),
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return await get_notifications(user["id"], unread_only)
+
+
+@app.get("/api/notifications/count")
+async def get_unread_count_endpoint(username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return {"unread": await get_unread_count(user["id"])}
+
+
+@app.post("/api/notifications/read")
+async def mark_read_endpoint(body: MarkReadRequest, username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    count = await mark_notifications_read(user["id"], body.ids)
+    return {"marked": count}
+
+
+@app.delete("/api/notifications/{notification_id}")
+async def delete_notification_endpoint(
+    notification_id: int, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not await delete_notification(user["id"], notification_id):
+        raise HTTPException(status_code=404, detail="Notification not found")
     return {"ok": True}
 
 

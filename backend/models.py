@@ -207,3 +207,17 @@ class UpdateSprintRequest(BaseModel):
 
 class AssignCardSprintRequest(BaseModel):
     sprint_id: int
+
+
+class Notification(BaseModel):
+    id: int
+    type: str
+    message: str
+    board_id: int | None = None
+    card_id: str | None = None
+    read: bool
+    created_at: str
+
+
+class MarkReadRequest(BaseModel):
+    ids: list[int] | None = None  # None = mark all read

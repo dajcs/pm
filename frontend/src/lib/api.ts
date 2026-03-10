@@ -390,6 +390,38 @@ export interface ChatResponse {
   board_update: BoardData | null;
 }
 
+// --- Notifications ---
+
+export interface AppNotification {
+  id: number;
+  type: "assignment" | "mention";
+  message: string;
+  board_id: number | null;
+  card_id: string | null;
+  read: boolean;
+  created_at: string;
+}
+
+export async function getNotifications(unreadOnly = false): Promise<AppNotification[]> {
+  return request<AppNotification[]>(`/api/notifications${unreadOnly ? "?unread_only=true" : ""}`);
+}
+
+export async function getUnreadCount(): Promise<number> {
+  const r = await request<{ unread: number }>("/api/notifications/count");
+  return r.unread;
+}
+
+export async function markNotificationsRead(ids?: number[]): Promise<void> {
+  await request("/api/notifications/read", {
+    method: "POST",
+    body: JSON.stringify(ids ? { ids } : {}),
+  });
+}
+
+export async function deleteNotification(id: number): Promise<void> {
+  await request(`/api/notifications/${id}`, { method: "DELETE" });
+}
+
 // --- Sprints ---
 
 export interface Sprint {

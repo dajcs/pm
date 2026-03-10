@@ -27,6 +27,7 @@ import { BoardSelector } from "@/components/BoardSelector";
 import { AccountModal } from "@/components/AccountModal";
 import { ArchivePanel } from "@/components/ArchivePanel";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { StatsPanel } from "@/components/StatsPanel";
 import { moveCard, moveColumn, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
@@ -77,6 +78,7 @@ export const KanbanBoard = ({
   const [showAccount, setShowAccount] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [boardMembers, setBoardMembers] = useState<string[]>([]);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -94,11 +96,33 @@ export const KanbanBoard = ({
       setShowAccount(false);
       setShowArchive(false);
       setShowActivity(false);
+      setShowStats(false);
       setAddingColumn(false);
       searchInputRef.current?.blur();
     },
     onAddCard: () => firstAddCardRef.current?.(),
   });
+
+  const handleBulkArchive = (columnId: string) => {
+    if (!board || !boardId) return;
+    const prev = board;
+    const col = board.columns.find((c) => c.id === columnId);
+    if (!col) return;
+    const archivedIds = new Set(col.cardIds);
+    setBoard({
+      ...board,
+      columns: board.columns.map((c) =>
+        c.id === columnId ? { ...c, cardIds: [] } : c
+      ),
+      cards: Object.fromEntries(
+        Object.entries(board.cards).filter(([id]) => !archivedIds.has(id))
+      ),
+    });
+    api.archiveColumnCards(columnId, boardId).catch((err) => {
+      setBoard(prev);
+      showError(err.message);
+    });
+  };
 
   const handleExport = () => {
     if (!boardId) return;
@@ -593,6 +617,13 @@ export const KanbanBoard = ({
             {boardId && (
               <>
                 <button
+                  onClick={() => setShowStats(true)}
+                  className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
+                  title="Board statistics"
+                >
+                  stats
+                </button>
+                <button
                   onClick={() => setShowActivity(true)}
                   className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
                   title="View board activity"
@@ -644,6 +675,7 @@ export const KanbanBoard = ({
                   onCommentCountChange={handleCommentCountChange}
                   onAssign={handleAssign}
                   boardMembers={boardMembers}
+                  onBulkArchive={boardId ? handleBulkArchive : undefined}
                   onRegisterAddTrigger={idx === 0 ? (fn) => { firstAddCardRef.current = fn; } : undefined}
                 />
               ))}
@@ -721,6 +753,9 @@ export const KanbanBoard = ({
           onRestore={() => { /* board reloads on next fetch */ }}
           onClose={() => setShowArchive(false)}
         />
+      )}
+      {showStats && boardId && (
+        <StatsPanel boardId={boardId} onClose={() => setShowStats(false)} />
       )}
       {showActivity && boardId && (
         <ActivityFeed boardId={boardId} onClose={() => setShowActivity(false)} />

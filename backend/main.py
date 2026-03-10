@@ -24,6 +24,7 @@ from database import (
     add_column,
     add_comment,
     archive_card,
+    archive_column_cards,
     create_board,
     create_card,
     create_user,
@@ -391,6 +392,18 @@ async def restore_card_endpoint(
 @app.get("/api/board/archived-cards")
 async def list_archived_cards_endpoint(board_id: int = Depends(get_board_id)):
     return await list_archived_cards(board_id)
+
+
+@app.post("/api/board/columns/{column_id}/archive-all")
+async def archive_column_cards_endpoint(
+    column_id: str,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
+    count = await archive_column_cards(column_id, board_id)
+    if count > 0:
+        await add_activity(board_id, username, f"archived {count} card(s) from a column")
+    return {"archived_count": count}
 
 
 @app.patch("/api/board/cards/{card_id}")

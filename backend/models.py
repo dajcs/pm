@@ -71,6 +71,10 @@ class BoardStatsResponse(BaseModel):
     total_cards: int
     cards_by_column: dict[str, int]
     overdue_count: int
+    cards_by_priority: dict[str, int] = {}
+    due_soon_count: int = 0
+    assigned_count: int = 0
+    unassigned_count: int = 0
 
 
 class UpdateBoardDescriptionRequest(BaseModel):

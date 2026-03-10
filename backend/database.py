@@ -580,8 +580,8 @@ async def delete_column(column_id: str, board_id: int) -> bool:
 
 
 async def get_board_stats(board_id: int) -> dict:
-    """Return stats: total cards, cards per column, overdue count."""
-    from datetime import date
+    """Return comprehensive board stats including priority, assignment, and due-date breakdown."""
+    from datetime import date, timedelta
     db = await get_db()
     try:
         cols = await db.execute_fetchall(
@@ -589,24 +589,58 @@ async def get_board_stats(board_id: int) -> dict:
             (board_id,),
         )
         today = date.today().isoformat()
-        cards_by_column = {}
+        due_soon_cutoff = (date.today() + timedelta(days=3)).isoformat()
+        cards_by_column: dict[str, int] = {}
+        cards_by_priority: dict[str, int] = {}
         total = 0
         overdue = 0
+        due_soon = 0
+        assigned = 0
+
         for col in cols:
             rows = await db.execute_fetchall(
-                "SELECT id, due_date FROM cards WHERE column_id = ?", (col["id"],)
+                "SELECT id, due_date, priority, assigned_to FROM cards WHERE column_id = ? AND archived = 0",
+                (col["id"],),
             )
             count = len(rows)
             cards_by_column[col["title"]] = count
             total += count
             for row in rows:
-                if row["due_date"] and row["due_date"] < today:
-                    overdue += 1
+                p = row["priority"] or "none"
+                cards_by_priority[p] = cards_by_priority.get(p, 0) + 1
+                if row["due_date"]:
+                    if row["due_date"] < today:
+                        overdue += 1
+                    elif row["due_date"] <= due_soon_cutoff:
+                        due_soon += 1
+                if row["assigned_to"]:
+                    assigned += 1
+
         return {
             "total_cards": total,
             "cards_by_column": cards_by_column,
             "overdue_count": overdue,
+            "cards_by_priority": cards_by_priority,
+            "due_soon_count": due_soon,
+            "assigned_count": assigned,
+            "unassigned_count": total - assigned,
         }
+    finally:
+        await db.close()
+
+
+async def archive_column_cards(column_id: str, board_id: int) -> int:
+    """Archive all non-archived cards in a column. Returns count archived."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """UPDATE cards SET archived = 1
+               WHERE column_id = ? AND archived = 0
+               AND column_id IN (SELECT id FROM columns WHERE board_id = ?)""",
+            (column_id, board_id),
+        )
+        await db.commit()
+        return cursor.rowcount
     finally:
         await db.close()
 

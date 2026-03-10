@@ -158,6 +158,10 @@ export interface BoardStats {
   total_cards: number;
   cards_by_column: Record<string, number>;
   overdue_count: number;
+  cards_by_priority: Record<string, number>;
+  due_soon_count: number;
+  assigned_count: number;
+  unassigned_count: number;
 }
 
 export async function getBoardStats(boardId: number): Promise<BoardStats> {
@@ -233,6 +237,10 @@ export async function logBoardActivity(boardId: number, action: string): Promise
 
 export async function archiveCard(cardId: string, boardId?: number): Promise<void> {
   await request(`/api/board/cards/${cardId}/archive${boardParam(boardId)}`, { method: "POST" });
+}
+
+export async function archiveColumnCards(columnId: string, boardId?: number): Promise<{ archived_count: number }> {
+  return request(`/api/board/columns/${columnId}/archive-all${boardParam(boardId)}`, { method: "POST" });
 }
 
 export async function restoreCard(cardId: string, boardId?: number): Promise<void> {

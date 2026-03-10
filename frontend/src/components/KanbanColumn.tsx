@@ -6,6 +6,30 @@ import type { Card, Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
+type SortMode = "default" | "priority" | "due_date" | "title";
+
+const PRIORITY_ORDER: Record<string, number> = {
+  urgent: 0, high: 1, medium: 2, low: 3, none: 4,
+};
+
+function sortCards(cards: Card[], mode: SortMode): Card[] {
+  if (mode === "default") return cards;
+  return [...cards].sort((a, b) => {
+    if (mode === "priority") {
+      return (PRIORITY_ORDER[a.priority ?? "none"] ?? 4) - (PRIORITY_ORDER[b.priority ?? "none"] ?? 4);
+    }
+    if (mode === "due_date") {
+      const da = a.due_date ?? "9999-99-99";
+      const db = b.due_date ?? "9999-99-99";
+      return da < db ? -1 : da > db ? 1 : 0;
+    }
+    if (mode === "title") {
+      return a.title.localeCompare(b.title);
+    }
+    return 0;
+  });
+}
+
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
@@ -26,6 +50,7 @@ type KanbanColumnProps = {
   onRegisterAddTrigger?: (trigger: () => void) => void;
   onAssign?: (cardId: string, username: string | null) => void;
   boardMembers?: string[];
+  onBulkArchive?: (columnId: string) => void;
 };
 
 export const KanbanColumn = ({
@@ -48,11 +73,13 @@ export const KanbanColumn = ({
   onRegisterAddTrigger,
   onAssign,
   boardMembers,
+  onBulkArchive,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
   const [editingWip, setEditingWip] = useState(false);
   const [wipInput, setWipInput] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("default");
 
   // Sync local title if column prop changes (e.g. after API rollback)
   useEffect(() => {
@@ -121,6 +148,31 @@ export const KanbanColumn = ({
                   </button>
                 )
               )}
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as SortMode)}
+                className="text-xs text-[var(--gray-text)] bg-transparent border-none outline-none cursor-pointer hover:text-[var(--navy-dark)] transition-colors"
+                title="Sort cards"
+                aria-label="Sort cards"
+              >
+                <option value="default">sort</option>
+                <option value="priority">priority</option>
+                <option value="due_date">due date</option>
+                <option value="title">title</option>
+              </select>
+              {onBulkArchive && cards.length > 0 && (
+                <button
+                  title="Archive all cards in this column"
+                  onClick={() => {
+                    if (confirm(`Archive all ${cards.length} card(s) in "${column.title}"?`)) {
+                      onBulkArchive(column.id);
+                    }
+                  }}
+                  className="text-xs text-[var(--gray-text)] hover:text-orange-600 transition-colors px-0.5"
+                >
+                  arch all
+                </button>
+              )}
               {onDeleteColumn && (
                 <button
                   title="Delete column"
@@ -150,7 +202,7 @@ export const KanbanColumn = ({
       </div>
       <div className="mt-3 flex flex-1 flex-col gap-2">
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
-          {cards.map((card) => (
+          {sortCards(cards, sortMode).map((card) => (
             <KanbanCard
               key={card.id}
               card={card}

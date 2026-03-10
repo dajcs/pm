@@ -36,14 +36,18 @@ from database import (
     delete_comment,
     get_activity,
     get_board_by_id,
+    get_board_members_with_roles,
     get_board_stats,
     get_checklist,
     get_comments,
     get_or_create_board,
     get_user_by_username,
     init_db,
+    invite_board_member,
+    is_board_owner,
     list_archived_cards,
     list_boards,
+    list_shared_boards,
     load_board,
     rename_board,
     rename_column,
@@ -51,6 +55,7 @@ from database import (
     save_board,
     set_column_wip_limit,
     update_board_description,
+    remove_board_member,
     update_card,
     update_checklist_item,
     update_user_password,
@@ -61,15 +66,18 @@ from models import (
     AddChecklistItemRequest,
     AddCommentRequest,
     ArchivedCard,
+    BoardMember,
     LogActivityRequest,
     BoardData,
     BoardStatsResponse,
     ChangePasswordRequest,
     ChatRequest,
     Comment,
+    CreateBoardFromTemplateRequest,
     CreateBoardRequest,
     CreateCardRequest,
     CreateColumnRequest,
+    InviteMemberRequest,
     LoginRequest,
     RegisterRequest,
     RenameBoardRequest,
@@ -204,7 +212,14 @@ async def list_boards_endpoint(username: str = Depends(get_current_user)):
     user = await get_user_by_username(username)
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
-    return await list_boards(user["id"])
+    owned = await list_boards(user["id"])
+    shared = await list_shared_boards(user["id"])
+    # Mark shared boards so frontend can distinguish
+    for b in shared:
+        b["shared"] = True
+    for b in owned:
+        b.setdefault("shared", False)
+    return owned + shared
 
 
 @app.post("/api/boards", status_code=201)
@@ -216,6 +231,38 @@ async def create_board_endpoint(
         raise HTTPException(status_code=401, detail="User not found")
     board_id = await create_board(user["id"], body.name)
     return {"id": board_id, "name": body.name}
+
+
+BOARD_TEMPLATES: dict[str, list[str]] = {
+    "sprint": ["Backlog", "In Progress", "Testing", "Done"],
+    "marketing": ["Ideas", "Planning", "In Progress", "Review", "Published"],
+    "personal": ["To Do", "Doing", "Done"],
+    "product": ["Discovery", "Design", "Development", "QA", "Released"],
+    "hiring": ["Applied", "Screening", "Interview", "Offer", "Hired"],
+}
+
+
+@app.post("/api/boards/from-template", status_code=201)
+async def create_board_from_template_endpoint(
+    body: CreateBoardFromTemplateRequest, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    template_cols = BOARD_TEMPLATES.get(body.template.lower())
+    if template_cols is None:
+        raise HTTPException(status_code=400, detail=f"Unknown template '{body.template}'. Available: {list(BOARD_TEMPLATES)}")
+    board_id = await create_board(user["id"], body.name)
+    # Add template columns (create_board already adds default columns, we need to use them or replace)
+    # Get the newly created board and add template columns after loading
+    for title in template_cols:
+        await add_column(board_id, title)
+    return {"id": board_id, "name": body.name, "template": body.template}
+
+
+@app.get("/api/boards/templates")
+async def list_templates_endpoint():
+    return [{"name": k, "columns": v} for k, v in BOARD_TEMPLATES.items()]
 
 
 @app.patch("/api/boards/{bid}")
@@ -296,6 +343,49 @@ async def board_members_endpoint(bid: int, username: str = Depends(get_current_u
     if verified is None:
         raise HTTPException(status_code=404, detail="Board not found")
     return await list_board_members(bid)
+
+
+@app.get("/api/boards/{bid}/members/roles")
+async def board_members_with_roles_endpoint(bid: int, username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    verified = await get_board_by_id(bid, user["id"])
+    if verified is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return await get_board_members_with_roles(bid)
+
+
+@app.post("/api/boards/{bid}/invite")
+async def invite_member_endpoint(
+    bid: int, body: InviteMemberRequest, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    result = await invite_board_member(bid, user["id"], body.username)
+    if result == "not_owner":
+        raise HTTPException(status_code=403, detail="Only the board owner can invite members")
+    if result == "user_not_found":
+        raise HTTPException(status_code=404, detail=f"User '{body.username}' not found")
+    if result == "already_member":
+        raise HTTPException(status_code=409, detail="User is already a member")
+    await add_activity(bid, username, f"invited {body.username} to the board")
+    return {"ok": True}
+
+
+@app.delete("/api/boards/{bid}/members/{member_username}")
+async def remove_member_endpoint(
+    bid: int, member_username: str, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    removed = await remove_board_member(bid, user["id"], member_username)
+    if not removed:
+        raise HTTPException(status_code=403, detail="Not authorized or member not found")
+    await add_activity(bid, username, f"removed {member_username} from the board")
+    return {"ok": True}
 
 
 @app.get("/api/boards/{bid}/export")

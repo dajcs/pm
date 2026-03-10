@@ -29,6 +29,7 @@ import { ArchivePanel } from "@/components/ArchivePanel";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { StatsPanel } from "@/components/StatsPanel";
 import { CardDetailModal } from "@/components/CardDetailModal";
+import { BoardSharePanel } from "@/components/BoardSharePanel";
 import { moveCard, moveColumn, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
@@ -48,7 +49,7 @@ interface KanbanBoardProps {
   /** List of boards for the selector. */
   boards?: Board[];
   onBoardSelect?: (boardId: number) => void;
-  onBoardCreate?: (name: string) => void;
+  onBoardCreate?: (name: string, template?: string) => void;
   onBoardRename?: (boardId: number, name: string) => void;
   onBoardDelete?: (boardId: number) => void;
 }
@@ -80,6 +81,7 @@ export const KanbanBoard = ({
   const [showArchive, setShowArchive] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [detailCardId, setDetailCardId] = useState<string | null>(null);
   const [boardMembers, setBoardMembers] = useState<string[]>([]);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -99,6 +101,7 @@ export const KanbanBoard = ({
       setShowArchive(false);
       setShowActivity(false);
       setShowStats(false);
+      setShowShare(false);
       setDetailCardId(null);
       setAddingColumn(false);
       searchInputRef.current?.blur();
@@ -547,6 +550,7 @@ export const KanbanBoard = ({
                 onCreate={onBoardCreate}
                 onRename={onBoardRename}
                 onDelete={onBoardDelete}
+                onShare={boardId ? () => setShowShare(true) : undefined}
               />
             </div>
           ) : (
@@ -776,6 +780,15 @@ export const KanbanBoard = ({
       )}
       {showStats && boardId && (
         <StatsPanel boardId={boardId} onClose={() => setShowStats(false)} />
+      )}
+      {showShare && boardId && (
+        <BoardSharePanel
+          boardId={boardId}
+          onClose={() => setShowShare(false)}
+          onMembersChanged={() => {
+            if (boardId) api.getBoardMembers(boardId).then(setBoardMembers).catch(() => {});
+          }}
+        />
       )}
       {showActivity && boardId && (
         <ActivityFeed boardId={boardId} onClose={() => setShowActivity(false)} />

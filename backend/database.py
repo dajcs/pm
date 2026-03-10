@@ -93,6 +93,16 @@ async def init_db() -> None:
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_activity_board_id ON activity_log(board_id);
+            CREATE TABLE IF NOT EXISTS board_members (
+                id INTEGER PRIMARY KEY,
+                board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role TEXT NOT NULL DEFAULT 'member',
+                joined_at TEXT NOT NULL,
+                UNIQUE(board_id, user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_board_members_board ON board_members(board_id);
+            CREATE INDEX IF NOT EXISTS idx_board_members_user ON board_members(user_id);
         """)
 
         # Migrations: add new columns if they don't exist
@@ -514,15 +524,130 @@ async def create_board(user_id: int, name: str) -> int:
 
 
 async def get_board_by_id(board_id: int, user_id: int) -> int | None:
-    """Return board_id if it exists and belongs to user_id, else None."""
+    """Return board_id if it exists and user is owner or member, else None."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """SELECT id FROM boards WHERE id = ?
+               AND (user_id = ?
+                    OR EXISTS (SELECT 1 FROM board_members WHERE board_id = boards.id AND user_id = ?))""",
+            (board_id, user_id, user_id),
+        )
+        row = await cursor.fetchone()
+        return row["id"] if row else None
+    finally:
+        await db.close()
+
+
+async def is_board_owner(board_id: int, user_id: int) -> bool:
+    """Return True if user_id is the owner of this board."""
     db = await get_db()
     try:
         cursor = await db.execute(
             "SELECT id FROM boards WHERE id = ? AND user_id = ?",
             (board_id, user_id),
         )
+        return await cursor.fetchone() is not None
+    finally:
+        await db.close()
+
+
+async def invite_board_member(board_id: int, owner_user_id: int, invitee_username: str) -> str:
+    """Invite a user to a board. Returns 'ok', 'not_owner', 'user_not_found', or 'already_member'."""
+    db = await get_db()
+    try:
+        # Verify caller is owner
+        cursor = await db.execute(
+            "SELECT id FROM boards WHERE id = ? AND user_id = ?",
+            (board_id, owner_user_id),
+        )
+        if not await cursor.fetchone():
+            return "not_owner"
+        # Find invitee
+        cursor = await db.execute(
+            "SELECT id FROM users WHERE username = ?",
+            (invitee_username,),
+        )
         row = await cursor.fetchone()
-        return row["id"] if row else None
+        if not row:
+            return "user_not_found"
+        invitee_id = row["id"]
+        if invitee_id == owner_user_id:
+            return "already_member"
+        try:
+            joined_at = datetime.now(timezone.utc).isoformat()
+            await db.execute(
+                "INSERT INTO board_members (board_id, user_id, role, joined_at) VALUES (?, ?, 'member', ?)",
+                (board_id, invitee_id, joined_at),
+            )
+            await db.commit()
+            return "ok"
+        except Exception:
+            return "already_member"
+    finally:
+        await db.close()
+
+
+async def remove_board_member(board_id: int, owner_user_id: int, member_username: str) -> bool:
+    """Remove a member from a board. Owner-only. Returns True if removed."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id FROM boards WHERE id = ? AND user_id = ?",
+            (board_id, owner_user_id),
+        )
+        if not await cursor.fetchone():
+            return False
+        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (member_username,))
+        row = await cursor.fetchone()
+        if not row:
+            return False
+        cursor = await db.execute(
+            "DELETE FROM board_members WHERE board_id = ? AND user_id = ?",
+            (board_id, row["id"]),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def get_board_members_with_roles(board_id: int) -> list[dict]:
+    """Return list of {username, role} for all members of a board including owner."""
+    db = await get_db()
+    try:
+        # Owner
+        owner_rows = await db.execute_fetchall(
+            "SELECT u.username FROM boards b JOIN users u ON b.user_id = u.id WHERE b.id = ?",
+            (board_id,),
+        )
+        members = [{"username": r["username"], "role": "owner"} for r in owner_rows]
+        # Members
+        member_rows = await db.execute_fetchall(
+            """SELECT u.username, bm.role, bm.joined_at
+               FROM board_members bm JOIN users u ON bm.user_id = u.id
+               WHERE bm.board_id = ?
+               ORDER BY bm.joined_at""",
+            (board_id,),
+        )
+        members += [{"username": r["username"], "role": r["role"], "joined_at": r["joined_at"]} for r in member_rows]
+        return members
+    finally:
+        await db.close()
+
+
+async def list_shared_boards(user_id: int) -> list[dict]:
+    """Return boards where user is a member (not owner)."""
+    db = await get_db()
+    try:
+        rows = await db.execute_fetchall(
+            """SELECT b.id, b.name, b.created_at
+               FROM boards b JOIN board_members bm ON b.id = bm.board_id
+               WHERE bm.user_id = ?
+               ORDER BY b.created_at""",
+            (user_id,),
+        )
+        return [dict(r) for r in rows]
     finally:
         await db.close()
 

@@ -5,7 +5,7 @@ import { KanbanBoard } from "@/components/KanbanBoard";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { LoginPage } from "@/components/LoginPage";
 import { RegisterPage } from "@/components/RegisterPage";
-import { setAuthErrorHandler, listBoards, createBoardApi, renameBoardApi, deleteBoardApi } from "@/lib/api";
+import { setAuthErrorHandler, listBoards, createBoardApi, createBoardFromTemplate, renameBoardApi, deleteBoardApi } from "@/lib/api";
 import type { Board } from "@/lib/api";
 import type { BoardData } from "@/lib/kanban";
 
@@ -100,9 +100,11 @@ export default function Home() {
     setPendingBoard(null);
   }, []);
 
-  const handleBoardCreate = useCallback(async (name: string) => {
+  const handleBoardCreate = useCallback(async (name: string, template?: string) => {
     try {
-      const board = await createBoardApi(name);
+      const board = template
+        ? await createBoardFromTemplate(name, template)
+        : await createBoardApi(name);
       setBoards((prev) => [...prev, board]);
       setCurrentBoardId(board.id);
       setPendingBoard(null);

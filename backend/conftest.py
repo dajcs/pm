@@ -31,6 +31,7 @@ async def _reset_db():
             DROP TABLE IF EXISTS checklist_items;
             DROP TABLE IF EXISTS cards;
             DROP TABLE IF EXISTS columns;
+            DROP TABLE IF EXISTS board_members;
             DROP TABLE IF EXISTS boards;
             DROP TABLE IF EXISTS users;
         """)

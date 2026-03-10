@@ -4,6 +4,18 @@ export interface Board {
   id: number;
   name: string;
   created_at: string;
+  shared?: boolean;
+}
+
+export interface BoardMember {
+  username: string;
+  role: string;
+  joined_at?: string;
+}
+
+export interface BoardTemplate {
+  name: string;
+  columns: string[];
 }
 
 let onAuthError: (() => void) | null = null;
@@ -147,6 +159,34 @@ export async function renameBoardApi(id: number, name: string): Promise<void> {
   await request(`/api/boards/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ name }),
+  });
+}
+
+export async function createBoardFromTemplate(name: string, template: string): Promise<Board> {
+  return request<Board>("/api/boards/from-template", {
+    method: "POST",
+    body: JSON.stringify({ name, template }),
+  });
+}
+
+export async function listTemplates(): Promise<BoardTemplate[]> {
+  return request<BoardTemplate[]>("/api/boards/templates");
+}
+
+export async function getBoardMembersWithRoles(boardId: number): Promise<BoardMember[]> {
+  return request<BoardMember[]>(`/api/boards/${boardId}/members/roles`);
+}
+
+export async function inviteBoardMember(boardId: number, username: string): Promise<void> {
+  await request(`/api/boards/${boardId}/invite`, {
+    method: "POST",
+    body: JSON.stringify({ username }),
+  });
+}
+
+export async function removeBoardMember(boardId: number, username: string): Promise<void> {
+  await request(`/api/boards/${boardId}/members/${encodeURIComponent(username)}`, {
+    method: "DELETE",
   });
 }
 

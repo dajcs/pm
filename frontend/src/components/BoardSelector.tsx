@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import type { Board } from "@/lib/api";
+import { useEffect, useState } from "react";
+import type { Board, BoardTemplate } from "@/lib/api";
+import * as api from "@/lib/api";
 
 interface BoardSelectorProps {
   boards: Board[];
   currentBoardId: number;
   onSelect: (boardId: number) => void;
-  onCreate: (name: string) => void;
+  onCreate: (name: string, template?: string) => void;
   onRename: (boardId: number, name: string) => void;
   onDelete: (boardId: number) => void;
+  onShare?: (boardId: number) => void;
 }
 
 export const BoardSelector = ({
@@ -19,17 +21,27 @@ export const BoardSelector = ({
   onCreate,
   onRename,
   onDelete,
+  onShare,
 }: BoardSelectorProps) => {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [templates, setTemplates] = useState<BoardTemplate[]>([]);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+
+  useEffect(() => {
+    if (creating && templates.length === 0) {
+      api.listTemplates().then(setTemplates).catch(() => {});
+    }
+  }, [creating, templates.length]);
 
   const handleCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    onCreate(name);
+    onCreate(name, selectedTemplate || undefined);
     setNewName("");
+    setSelectedTemplate("");
     setCreating(false);
   };
 
@@ -38,6 +50,9 @@ export const BoardSelector = ({
     if (name) onRename(boardId, name);
     setRenamingId(null);
   };
+
+  const currentBoard = boards.find((b) => b.id === currentBoardId);
+  const isCurrentBoardOwned = currentBoard && !currentBoard.shared;
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -66,20 +81,34 @@ export const BoardSelector = ({
                 }`}
               >
                 {board.name}
+                {board.shared && (
+                  <span className="ml-1 text-[10px] opacity-70">(shared)</span>
+                )}
               </button>
               {board.id === currentBoardId && (
                 <>
-                  <button
-                    title="Rename board"
-                    onClick={() => {
-                      setRenamingId(board.id);
-                      setRenameValue(board.name);
-                    }}
-                    className="text-[var(--gray-text)] hover:text-[var(--navy-dark)] text-xs px-1"
-                  >
-                    edit
-                  </button>
-                  {boards.length > 1 && (
+                  {onShare && !board.shared && (
+                    <button
+                      title="Share board"
+                      onClick={() => onShare(board.id)}
+                      className="text-[var(--gray-text)] hover:text-[var(--secondary-purple)] text-xs px-1"
+                    >
+                      share
+                    </button>
+                  )}
+                  {!board.shared && (
+                    <button
+                      title="Rename board"
+                      onClick={() => {
+                        setRenamingId(board.id);
+                        setRenameValue(board.name);
+                      }}
+                      className="text-[var(--gray-text)] hover:text-[var(--navy-dark)] text-xs px-1"
+                    >
+                      edit
+                    </button>
+                  )}
+                  {boards.filter((b) => !b.shared).length > 1 && !board.shared && (
                     <button
                       title="Delete board"
                       onClick={() => {
@@ -100,7 +129,7 @@ export const BoardSelector = ({
       ))}
 
       {creating ? (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           <input
             autoFocus
             placeholder="Board name"
@@ -112,6 +141,18 @@ export const BoardSelector = ({
               if (e.key === "Escape") setCreating(false);
             }}
           />
+          {templates.length > 0 && (
+            <select
+              value={selectedTemplate}
+              onChange={(e) => setSelectedTemplate(e.target.value)}
+              className="rounded-lg border border-[var(--stroke)] px-2 py-1 text-xs text-[var(--navy-dark)] bg-white outline-none focus:border-[var(--primary-blue)]"
+            >
+              <option value="">blank</option>
+              {templates.map((t) => (
+                <option key={t.name} value={t.name}>{t.name}</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={handleCreate}
             className="rounded-lg bg-[var(--primary-blue)] px-2 py-1 text-xs font-semibold text-white"

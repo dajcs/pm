@@ -23,6 +23,7 @@ type KanbanColumnProps = {
   onSetWipLimit?: (columnId: string, wipLimit: number | null) => void;
   onChecklistCountChange?: (cardId: string, total: number, done: number) => void;
   onCommentCountChange?: (cardId: string, count: number) => void;
+  onRegisterAddTrigger?: (trigger: () => void) => void;
 };
 
 export const KanbanColumn = ({
@@ -42,6 +43,7 @@ export const KanbanColumn = ({
   onChecklistCountChange,
   onCommentCountChange,
   onArchiveCard,
+  onRegisterAddTrigger,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
@@ -168,6 +170,7 @@ export const KanbanColumn = ({
       </div>
       <NewCardForm
         onAdd={(title, details) => onAddCard(column.id, title, details)}
+        onRegisterOpenTrigger={onRegisterAddTrigger}
       />
     </section>
   );

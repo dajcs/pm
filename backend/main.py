@@ -17,6 +17,7 @@ from ai import chat_with_board
 from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
 from database import (
     add_activity,
+    export_board,
     add_checklist_item,
     add_column,
     add_comment,
@@ -56,6 +57,7 @@ from models import (
     AddChecklistItemRequest,
     AddCommentRequest,
     ArchivedCard,
+    LogActivityRequest,
     BoardData,
     BoardStatsResponse,
     ChangePasswordRequest,
@@ -257,6 +259,31 @@ async def board_activity(bid: int, username: str = Depends(get_current_user)):
     if verified is None:
         raise HTTPException(status_code=404, detail="Board not found")
     return await get_activity(bid)
+
+
+@app.post("/api/boards/{bid}/activity")
+async def log_board_activity(
+    bid: int, body: LogActivityRequest, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    verified = await get_board_by_id(bid, user["id"])
+    if verified is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    await add_activity(bid, username, body.action)
+    return {"ok": True}
+
+
+@app.get("/api/boards/{bid}/export")
+async def export_board_endpoint(bid: int, username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    verified = await get_board_by_id(bid, user["id"])
+    if verified is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return await export_board(bid)
 
 
 @app.patch("/api/boards/{bid}/description")

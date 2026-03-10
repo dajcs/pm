@@ -205,6 +205,19 @@ export async function deleteChecklistItem(
   });
 }
 
+// --- Export ---
+
+export async function exportBoard(boardId: number): Promise<unknown> {
+  return request(`/api/boards/${boardId}/export`);
+}
+
+export async function logBoardActivity(boardId: number, action: string): Promise<void> {
+  await request(`/api/boards/${boardId}/activity`, {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
+
 // --- Archive ---
 
 export async function archiveCard(cardId: string, boardId?: number): Promise<void> {

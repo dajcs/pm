@@ -805,6 +805,49 @@ async def get_activity(board_id: int, limit: int = 50) -> list[dict]:
         await db.close()
 
 
+async def export_board(board_id: int) -> dict:
+    """Return full board data including archived cards, columns, and metadata."""
+    db = await get_db()
+    try:
+        import json as _json
+        board_row = await db.execute_fetchall(
+            "SELECT id, name, description, created_at FROM boards WHERE id = ?", (board_id,)
+        )
+        if not board_row:
+            return {}
+        b = board_row[0]
+        cols = await db.execute_fetchall(
+            "SELECT id, title, wip_limit FROM columns WHERE board_id = ? ORDER BY position", (board_id,)
+        )
+        card_rows = await db.execute_fetchall(
+            """SELECT cards.id, cards.column_id, cards.title, cards.details,
+                      cards.due_date, cards.priority, cards.labels, cards.archived
+               FROM cards JOIN columns ON cards.column_id = columns.id
+               WHERE columns.board_id = ? ORDER BY columns.position, cards.position""",
+            (board_id,),
+        )
+        cards = []
+        for card in card_rows:
+            cards.append({
+                "id": card["id"],
+                "column_id": card["column_id"],
+                "title": card["title"],
+                "details": card["details"],
+                "due_date": card["due_date"],
+                "priority": card["priority"] or "none",
+                "labels": _json.loads(card["labels"] or "[]"),
+                "archived": bool(card["archived"]),
+            })
+        return {
+            "board": {"id": b["id"], "name": b["name"], "description": b["description"] or "", "created_at": b["created_at"]},
+            "columns": [{"id": c["id"], "title": c["title"], "wip_limit": c["wip_limit"]} for c in cols],
+            "cards": cards,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+        }
+    finally:
+        await db.close()
+
+
 async def update_user_password(user_id: int, new_password: str) -> None:
     db = await get_db()
     try:

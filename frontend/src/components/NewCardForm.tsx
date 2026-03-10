@@ -1,13 +1,18 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 const initialFormState = { title: "", details: "" };
 
 type NewCardFormProps = {
   onAdd: (title: string, details: string) => void;
+  onRegisterOpenTrigger?: (trigger: () => void) => void;
 };
 
-export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
+export const NewCardForm = ({ onAdd, onRegisterOpenTrigger }: NewCardFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    onRegisterOpenTrigger?.(() => setIsOpen(true));
+  }, [onRegisterOpenTrigger]);
   const [formState, setFormState] = useState(initialFormState);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {

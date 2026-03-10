@@ -30,6 +30,7 @@ import { ActivityFeed } from "@/components/ActivityFeed";
 import { moveCard, moveColumn, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 interface KanbanBoardProps {
   onLogout?: () => void;
@@ -77,12 +78,39 @@ export const KanbanBoard = ({
   const [showArchive, setShowArchive] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const firstAddCardRef = useRef<(() => void) | null>(null);
 
   const showError = useCallback((msg: string) => {
     setError(msg);
     if (errorTimer.current) clearTimeout(errorTimer.current);
     errorTimer.current = setTimeout(() => setError(null), 4000);
   }, []);
+
+  useKeyboardShortcuts({
+    onFocusSearch: () => searchInputRef.current?.focus(),
+    onEscape: () => {
+      setShowAccount(false);
+      setShowArchive(false);
+      setShowActivity(false);
+      setAddingColumn(false);
+      searchInputRef.current?.blur();
+    },
+    onAddCard: () => firstAddCardRef.current?.(),
+  });
+
+  const handleExport = () => {
+    if (!boardId) return;
+    api.exportBoard(boardId).then((data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `board-export-${boardId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }).catch((err) => showError(err.message));
+  };
 
   // Fetch board on mount or when boardId changes (skip if initialBoard provided)
   useEffect(() => {
@@ -156,6 +184,20 @@ export const KanbanBoard = ({
       if (!over || active.id === over.id || !board) return;
 
       const activeIsColumn = board.columns.some((c) => c.id === active.id);
+
+      // Detect cross-column card move for activity logging
+      if (!activeIsColumn && boardId) {
+        const fromCol = board.columns.find((c) => c.cardIds.includes(active.id as string));
+        const toColId = board.columns.find((c) => c.id === over.id)?.id
+          ?? board.columns.find((c) => c.cardIds.includes(over.id as string))?.id;
+        const toCol = board.columns.find((c) => c.id === toColId);
+        if (fromCol && toCol && fromCol.id !== toCol.id) {
+          const card = board.cards[active.id as string];
+          const action = `moved card "${card?.title ?? active.id}" from ${fromCol.title} to ${toCol.title}`;
+          api.logBoardActivity(boardId, action).catch(() => { /* non-critical */ });
+        }
+      }
+
       const newColumns = activeIsColumn
         ? moveColumn(board.columns, active.id as string, over.id as string)
         : moveCard(board.columns, active.id as string, over.id as string);
@@ -478,11 +520,12 @@ export const KanbanBoard = ({
 
         <div className="flex flex-wrap items-center gap-3 px-1">
           <input
+            ref={searchInputRef}
             type="search"
-            placeholder="Search cards..."
+            placeholder="Search cards... (/)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="rounded-xl border border-[var(--stroke)] bg-white px-3 py-1.5 text-xs text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)] w-40"
+            className="rounded-xl border border-[var(--stroke)] bg-white px-3 py-1.5 text-xs text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)] w-44"
             aria-label="Search cards"
           />
           <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--gray-text)]">Filter:</span>
@@ -526,13 +569,22 @@ export const KanbanBoard = ({
               archive
             </button>
             {boardId && (
-              <button
-                onClick={() => setShowActivity(true)}
-                className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
-                title="View board activity"
-              >
-                activity
-              </button>
+              <>
+                <button
+                  onClick={() => setShowActivity(true)}
+                  className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
+                  title="View board activity"
+                >
+                  activity
+                </button>
+                <button
+                  onClick={handleExport}
+                  className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
+                  title="Export board as JSON"
+                >
+                  export
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -549,7 +601,7 @@ export const KanbanBoard = ({
               className="grid gap-4"
               style={{ gridTemplateColumns: `repeat(${board.columns.length + 1}, minmax(190px, 1fr))` }}
             >
-              {board.columns.map((column) => (
+              {board.columns.map((column, idx) => (
                 <KanbanColumn
                   key={column.id}
                   column={column}
@@ -568,6 +620,7 @@ export const KanbanBoard = ({
                   onSetWipLimit={handleSetWipLimit}
                   onChecklistCountChange={handleChecklistCountChange}
                   onCommentCountChange={handleCommentCountChange}
+                  onRegisterAddTrigger={idx === 0 ? (fn) => { firstAddCardRef.current = fn; } : undefined}
                 />
               ))}
               {/* Add column slot */}

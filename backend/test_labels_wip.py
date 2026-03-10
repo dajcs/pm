@@ -8,11 +8,12 @@ from conftest import auth_header, login
 async def test_card_has_empty_labels_by_default(client):
     token = await login(client)
     headers = auth_header(token)
-    await client.get("/api/board", headers=headers)
+    board_data = (await client.get("/api/board", headers=headers)).json()
+    col_id = board_data["columns"][0]["id"]
 
     res = await client.post(
         "/api/board/cards",
-        json={"column_id": "col-backlog", "title": "No labels"},
+        json={"column_id": col_id, "title": "No labels"},
         headers=headers,
     )
     assert res.status_code == 201
@@ -106,17 +107,18 @@ async def test_column_has_no_wip_limit_by_default(client):
 async def test_set_column_wip_limit(client):
     token = await login(client)
     headers = auth_header(token)
-    await client.get("/api/board", headers=headers)
+    board_data = (await client.get("/api/board", headers=headers)).json()
+    col_id = board_data["columns"][0]["id"]
 
     res = await client.put(
-        "/api/board/columns/col-backlog/wip-limit",
+        f"/api/board/columns/{col_id}/wip-limit",
         json={"wip_limit": 3},
         headers=headers,
     )
     assert res.status_code == 200
 
     board_res = await client.get("/api/board", headers=headers)
-    backlog = next(c for c in board_res.json()["columns"] if c["id"] == "col-backlog")
+    backlog = next(c for c in board_res.json()["columns"] if c["id"] == col_id)
     assert backlog["wip_limit"] == 3
 
 
@@ -124,22 +126,15 @@ async def test_set_column_wip_limit(client):
 async def test_clear_column_wip_limit(client):
     token = await login(client)
     headers = auth_header(token)
-    await client.get("/api/board", headers=headers)
+    board_data = (await client.get("/api/board", headers=headers)).json()
+    col_id = board_data["columns"][0]["id"]
 
-    await client.put(
-        "/api/board/columns/col-backlog/wip-limit",
-        json={"wip_limit": 5},
-        headers=headers,
-    )
-    res = await client.put(
-        "/api/board/columns/col-backlog/wip-limit",
-        json={"wip_limit": None},
-        headers=headers,
-    )
+    await client.put(f"/api/board/columns/{col_id}/wip-limit", json={"wip_limit": 5}, headers=headers)
+    res = await client.put(f"/api/board/columns/{col_id}/wip-limit", json={"wip_limit": None}, headers=headers)
     assert res.status_code == 200
 
     board_res = await client.get("/api/board", headers=headers)
-    backlog = next(c for c in board_res.json()["columns"] if c["id"] == "col-backlog")
+    backlog = next(c for c in board_res.json()["columns"] if c["id"] == col_id)
     assert backlog["wip_limit"] is None
 
 

@@ -4,6 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import type { Card } from "@/lib/kanban";
 import { ChecklistPanel } from "@/components/ChecklistPanel";
+import { CommentsPanel } from "@/components/CommentsPanel";
 
 type KanbanCardProps = {
   card: Card;
@@ -14,6 +15,7 @@ type KanbanCardProps = {
   onUpdateDueDate?: (cardId: string, dueDate: string | null) => void;
   onUpdateLabels?: (cardId: string, labels: string[]) => void;
   onChecklistCountChange?: (cardId: string, total: number, done: number) => void;
+  onCommentCountChange?: (cardId: string, count: number) => void;
 };
 
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
@@ -47,10 +49,11 @@ function getDueDateStyle(dueDate: string | null | undefined): string {
   return "text-[var(--gray-text)]";
 }
 
-export const KanbanCard = ({ card, boardId, onDelete, onEdit, onUpdatePriority, onUpdateDueDate, onUpdateLabels, onChecklistCountChange }: KanbanCardProps) => {
+export const KanbanCard = ({ card, boardId, onDelete, onEdit, onUpdatePriority, onUpdateDueDate, onUpdateLabels, onChecklistCountChange, onCommentCountChange }: KanbanCardProps) => {
   const [editingField, setEditingField] = useState<"title" | "details" | "due_date" | null>(null);
   const [showLabels, setShowLabels] = useState(false);
   const [showChecklist, setShowChecklist] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const [editTitle, setEditTitle] = useState(card.title);
   const [editDetails, setEditDetails] = useState(card.details);
   const [editDueDate, setEditDueDate] = useState(card.due_date ?? "");
@@ -251,6 +254,15 @@ export const KanbanCard = ({ card, boardId, onDelete, onEdit, onUpdatePriority, 
                 ? `${card.checklist_done ?? 0}/${card.checklist_total}`
                 : "list"}
             </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setShowComments((v) => !v); }}
+              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${showComments ? "border-[var(--primary-blue)] text-[var(--primary-blue)]" : "border-[var(--stroke)] text-[var(--gray-text)] hover:border-[var(--primary-blue)]"}`}
+              aria-label="Toggle comments"
+              title="Comments"
+            >
+              {(card.comment_count ?? 0) > 0 ? `${card.comment_count} msg` : "msg"}
+            </button>
             {editingField === "due_date" ? (
               <input
                 type="date"
@@ -286,6 +298,13 @@ export const KanbanCard = ({ card, boardId, onDelete, onEdit, onUpdatePriority, 
           cardId={card.id}
           boardId={boardId}
           onCountChange={(total, done) => onChecklistCountChange?.(card.id, total, done)}
+        />
+      )}
+      {showComments && (
+        <CommentsPanel
+          cardId={card.id}
+          boardId={boardId}
+          onCountChange={(count) => onCommentCountChange?.(card.id, count)}
         />
       )}
     </article>

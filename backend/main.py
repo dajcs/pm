@@ -16,8 +16,10 @@ from slowapi.util import get_remote_address
 from ai import chat_with_board
 from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
 from database import (
+    add_activity,
     add_checklist_item,
     add_column,
+    add_comment,
     create_board,
     create_card,
     create_user,
@@ -25,9 +27,12 @@ from database import (
     delete_card,
     delete_checklist_item,
     delete_column,
+    delete_comment,
+    get_activity,
     get_board_by_id,
     get_board_stats,
     get_checklist,
+    get_comments,
     get_or_create_board,
     get_user_by_username,
     init_db,
@@ -44,11 +49,14 @@ from database import (
     verify_password,
 )
 from models import (
+    ActivityEntry,
     AddChecklistItemRequest,
+    AddCommentRequest,
     BoardData,
     BoardStatsResponse,
     ChangePasswordRequest,
     ChatRequest,
+    Comment,
     CreateBoardRequest,
     CreateCardRequest,
     CreateColumnRequest,
@@ -236,6 +244,17 @@ async def board_stats(bid: int, username: str = Depends(get_current_user)):
     return await get_board_stats(bid)
 
 
+@app.get("/api/boards/{bid}/activity")
+async def board_activity(bid: int, username: str = Depends(get_current_user)):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    verified = await get_board_by_id(bid, user["id"])
+    if verified is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return await get_activity(bid)
+
+
 @app.patch("/api/boards/{bid}/description")
 async def update_board_description_endpoint(
     bid: int, body: UpdateBoardDescriptionRequest, username: str = Depends(get_current_user)
@@ -269,17 +288,27 @@ async def put_board(data: BoardData, board_id: int = Depends(get_board_id)):
 
 
 @app.post("/api/board/cards", status_code=201)
-async def post_card(body: CreateCardRequest, board_id: int = Depends(get_board_id)):
+async def post_card(
+    body: CreateCardRequest,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
     card_id = await create_card(board_id, body.column_id, body.title, body.details, body.due_date, body.priority)
     if card_id is None:
         raise HTTPException(status_code=404, detail="Column not found")
+    await add_activity(board_id, username, f"created card \"{body.title}\"")
     return {"id": card_id, "title": body.title, "details": body.details, "due_date": body.due_date, "priority": body.priority}
 
 
 @app.delete("/api/board/cards/{card_id}")
-async def delete_card_endpoint(card_id: str, board_id: int = Depends(get_board_id)):
+async def delete_card_endpoint(
+    card_id: str,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
     if not await delete_card(card_id, board_id):
         raise HTTPException(status_code=404, detail="Card not found")
+    await add_activity(board_id, username, "deleted a card")
     return {"ok": True}
 
 
@@ -334,6 +363,46 @@ async def delete_checklist_item_endpoint(
 ):
     if not await delete_checklist_item(item_id, card_id, board_id):
         raise HTTPException(status_code=404, detail="Checklist item not found")
+    return {"ok": True}
+
+
+# --- Comments ---
+
+
+@app.get("/api/board/cards/{card_id}/comments")
+async def get_comments_endpoint(card_id: str, board_id: int = Depends(get_board_id)):
+    items = await get_comments(card_id, board_id)
+    if items is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return items
+
+
+@app.post("/api/board/cards/{card_id}/comments", status_code=201)
+async def add_comment_endpoint(
+    card_id: str,
+    body: AddCommentRequest,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
+    comment_id = await add_comment(card_id, board_id, username, body.text)
+    if comment_id is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    from datetime import datetime, timezone
+    return {"id": comment_id, "username": username, "text": body.text, "created_at": datetime.now(timezone.utc).isoformat()}
+
+
+@app.delete("/api/board/cards/{card_id}/comments/{comment_id}")
+async def delete_comment_endpoint(
+    card_id: str,
+    comment_id: int,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
+    result = await delete_comment(comment_id, card_id, board_id, username)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if result == "forbidden":
+        raise HTTPException(status_code=403, detail="Cannot delete another user's comment")
     return {"ok": True}
 
 

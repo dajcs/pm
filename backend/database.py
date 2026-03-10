@@ -77,6 +77,22 @@ async def init_db() -> None:
                 position INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_checklist_card_id ON checklist_items(card_id);
+            CREATE TABLE IF NOT EXISTS comments (
+                id INTEGER PRIMARY KEY,
+                card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                username TEXT NOT NULL,
+                text TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_comments_card_id ON comments(card_id);
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id INTEGER PRIMARY KEY,
+                board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+                username TEXT NOT NULL,
+                action TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_activity_board_id ON activity_log(board_id);
         """)
 
         # Migrations: add new columns if they don't exist
@@ -140,7 +156,8 @@ async def get_or_create_board(user_id: int) -> int:
         )
         board_id = cursor.lastrowid
 
-        for col_id, title, position in DEFAULT_COLUMNS:
+        for _, title, position in DEFAULT_COLUMNS:
+            col_id = f"col-{uuid.uuid4().hex[:8]}"
             await db.execute(
                 "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
                 (col_id, board_id, title, position),
@@ -170,6 +187,17 @@ async def load_board(board_id: int) -> dict:
                ORDER BY columns.position, cards.position""",
             (board_id,),
         )
+        # Load comment counts for all cards on this board in one query
+        comment_count_rows = await db.execute_fetchall(
+            """SELECT cm.card_id, COUNT(*) as cnt
+               FROM comments cm
+               JOIN cards c ON cm.card_id = c.id
+               JOIN columns col ON c.column_id = col.id
+               WHERE col.board_id = ?
+               GROUP BY cm.card_id""",
+            (board_id,),
+        )
+        comment_counts: dict[str, int] = {r["card_id"]: r["cnt"] for r in comment_count_rows}
         # Load checklist summaries for all cards on this board in one query
         checklist_rows = await db.execute_fetchall(
             """SELECT ci.card_id,
@@ -201,6 +229,7 @@ async def load_board(board_id: int) -> dict:
                 "labels": _json.loads(card["labels"] or "[]"),
                 "checklist_total": summary["total"],
                 "checklist_done": summary["done"],
+                "comment_count": comment_counts.get(card_id, 0),
             }
             if col_id in cards_by_col:
                 cards_by_col[col_id].append(card_id)
@@ -631,6 +660,87 @@ async def delete_checklist_item(item_id: int, card_id: str, board_id: int) -> bo
         )
         await db.commit()
         return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def get_comments(card_id: str, board_id: int) -> list[dict] | None:
+    """Return comments for a card, or None if card not on board."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return None
+        rows = await db.execute_fetchall(
+            "SELECT id, username, text, created_at FROM comments WHERE card_id = ? ORDER BY created_at",
+            (card_id,),
+        )
+        return [{"id": r["id"], "username": r["username"], "text": r["text"], "created_at": r["created_at"]} for r in rows]
+    finally:
+        await db.close()
+
+
+async def add_comment(card_id: str, board_id: int, username: str, text: str) -> int | None:
+    """Add a comment to a card. Returns comment id or None if card not on board."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return None
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = await db.execute(
+            "INSERT INTO comments (card_id, username, text, created_at) VALUES (?, ?, ?, ?)",
+            (card_id, username, text, now),
+        )
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def delete_comment(comment_id: int, card_id: str, board_id: int, username: str) -> str:
+    """Delete a comment. Returns 'ok', 'not_found', or 'forbidden'."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return "not_found"
+        cursor = await db.execute(
+            "SELECT id, username FROM comments WHERE id = ? AND card_id = ?",
+            (comment_id, card_id),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return "not_found"
+        if row["username"] != username:
+            return "forbidden"
+        await db.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
+        await db.commit()
+        return "ok"
+    finally:
+        await db.close()
+
+
+async def add_activity(board_id: int, username: str, action: str) -> None:
+    """Append an activity log entry for the board."""
+    db = await get_db()
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        await db.execute(
+            "INSERT INTO activity_log (board_id, username, action, created_at) VALUES (?, ?, ?, ?)",
+            (board_id, username, action, now),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_activity(board_id: int, limit: int = 50) -> list[dict]:
+    """Return recent activity for a board (most recent first)."""
+    db = await get_db()
+    try:
+        rows = await db.execute_fetchall(
+            "SELECT id, username, action, created_at FROM activity_log WHERE board_id = ? ORDER BY created_at DESC LIMIT ?",
+            (board_id, limit),
+        )
+        return [{"id": r["id"], "username": r["username"], "action": r["action"], "created_at": r["created_at"]} for r in rows]
     finally:
         await db.close()
 

@@ -298,6 +298,15 @@ export const KanbanBoard = ({
     });
   };
 
+  const handleCommentCountChange = (cardId: string, count: number) => {
+    setBoard((prev) => {
+      if (!prev) return prev;
+      const card = prev.cards[cardId];
+      if (!card) return prev;
+      return { ...prev, cards: { ...prev.cards, [cardId]: { ...card, comment_count: count } } };
+    });
+  };
+
   const handleSetWipLimit = (columnId: string, wipLimit: number | null) => {
     if (!board) return;
     const prev = board;
@@ -523,6 +532,7 @@ export const KanbanBoard = ({
                   onUpdateLabels={handleUpdateLabels}
                   onSetWipLimit={handleSetWipLimit}
                   onChecklistCountChange={handleChecklistCountChange}
+                  onCommentCountChange={handleCommentCountChange}
                 />
               ))}
               {/* Add column slot */}

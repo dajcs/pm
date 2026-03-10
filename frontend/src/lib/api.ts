@@ -1,4 +1,4 @@
-import type { BoardData, ChecklistItem } from "./kanban";
+import type { ActivityEntry, BoardData, ChecklistItem, Comment } from "./kanban";
 
 export interface Board {
   id: number;
@@ -203,6 +203,31 @@ export async function deleteChecklistItem(
   await request(`/api/board/cards/${cardId}/checklist/${itemId}${boardParam(boardId)}`, {
     method: "DELETE",
   });
+}
+
+// --- Comments ---
+
+export async function getComments(cardId: string, boardId?: number): Promise<Comment[]> {
+  return request<Comment[]>(`/api/board/cards/${cardId}/comments${boardParam(boardId)}`);
+}
+
+export async function addComment(cardId: string, text: string, boardId?: number): Promise<Comment> {
+  return request<Comment>(`/api/board/cards/${cardId}/comments${boardParam(boardId)}`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function deleteComment(cardId: string, commentId: number, boardId?: number): Promise<void> {
+  await request(`/api/board/cards/${cardId}/comments/${commentId}${boardParam(boardId)}`, {
+    method: "DELETE",
+  });
+}
+
+// --- Activity ---
+
+export async function getBoardActivity(boardId: number): Promise<ActivityEntry[]> {
+  return request<ActivityEntry[]>(`/api/boards/${boardId}/activity`);
 }
 
 // --- Auth ---

@@ -6,11 +6,12 @@ from conftest import auth_header, login
 async def test_create_card_with_priority(client):
     token = await login(client)
     headers = auth_header(token)
-    await client.get("/api/board", headers=headers)
+    board_data = (await client.get("/api/board", headers=headers)).json()
+    col_id = board_data["columns"][0]["id"]
 
     res = await client.post(
         "/api/board/cards",
-        json={"column_id": "col-backlog", "title": "High prio task", "priority": "high"},
+        json={"column_id": col_id, "title": "High prio task", "priority": "high"},
         headers=headers,
     )
     assert res.status_code == 201
@@ -26,11 +27,12 @@ async def test_create_card_with_priority(client):
 async def test_create_card_with_due_date(client):
     token = await login(client)
     headers = auth_header(token)
-    await client.get("/api/board", headers=headers)
+    board_data = (await client.get("/api/board", headers=headers)).json()
+    col_id = board_data["columns"][0]["id"]
 
     res = await client.post(
         "/api/board/cards",
-        json={"column_id": "col-backlog", "title": "Due soon", "due_date": "2030-12-31"},
+        json={"column_id": col_id, "title": "Due soon", "due_date": "2030-12-31"},
         headers=headers,
     )
     assert res.status_code == 201

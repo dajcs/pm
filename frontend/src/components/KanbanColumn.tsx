@@ -21,6 +21,7 @@ type KanbanColumnProps = {
   onUpdateLabels?: (cardId: string, labels: string[]) => void;
   onSetWipLimit?: (columnId: string, wipLimit: number | null) => void;
   onChecklistCountChange?: (cardId: string, total: number, done: number) => void;
+  onCommentCountChange?: (cardId: string, count: number) => void;
 };
 
 export const KanbanColumn = ({
@@ -38,6 +39,7 @@ export const KanbanColumn = ({
   onUpdateLabels,
   onSetWipLimit,
   onChecklistCountChange,
+  onCommentCountChange,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
@@ -151,6 +153,7 @@ export const KanbanColumn = ({
               onUpdateDueDate={onUpdateDueDate}
               onUpdateLabels={onUpdateLabels}
               onChecklistCountChange={onChecklistCountChange}
+              onCommentCountChange={onCommentCountChange}
             />
           ))}
         </SortableContext>

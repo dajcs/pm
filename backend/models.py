@@ -15,6 +15,7 @@ class Card(BaseModel):
     labels: list[str] = []
     checklist_total: int = 0
     checklist_done: int = 0
+    comment_count: int = 0
 
 
 class ChecklistItem(BaseModel):
@@ -108,3 +109,21 @@ class ChangePasswordRequest(BaseModel):
 
 class CreateColumnRequest(BaseModel):
     title: str = Field(max_length=200)
+
+
+class Comment(BaseModel):
+    id: int
+    username: str
+    text: str
+    created_at: str
+
+
+class AddCommentRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class ActivityEntry(BaseModel):
+    id: int
+    username: str
+    action: str
+    created_at: str

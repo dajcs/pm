@@ -4,6 +4,20 @@ export type ChecklistItem = {
   checked: boolean;
 };
 
+export type Comment = {
+  id: number;
+  username: string;
+  text: string;
+  created_at: string;
+};
+
+export type ActivityEntry = {
+  id: number;
+  username: string;
+  action: string;
+  created_at: string;
+};
+
 export type Card = {
   id: string;
   title: string;
@@ -13,6 +27,7 @@ export type Card = {
   labels?: string[];
   checklist_total?: number;
   checklist_done?: number;
+  comment_count?: number;
 };
 
 export type Column = {

@@ -35,7 +35,7 @@ async def test_get_board_creates_default(client):
     assert res.status_code == 200
     data = res.json()
     assert len(data["columns"]) == 5
-    assert data["columns"][0]["id"] == "col-backlog"
+    assert data["columns"][0]["title"] == "Backlog"
     assert data["cards"] == {}
 
 
@@ -95,11 +95,12 @@ async def test_create_card(client):
     headers = auth_header(token)
 
     # Get default board to have columns
-    await client.get("/api/board", headers=headers)
+    board_data = (await client.get("/api/board", headers=headers)).json()
+    col_id = board_data["columns"][0]["id"]
 
     res = await client.post(
         "/api/board/cards",
-        json={"column_id": "col-backlog", "title": "New Card", "details": "Details here"},
+        json={"column_id": col_id, "title": "New Card", "details": "Details here"},
         headers=headers,
     )
     assert res.status_code == 201
@@ -206,10 +207,11 @@ async def test_patch_card_partial(client):
 async def test_rename_column(client):
     token = await login(client)
     headers = auth_header(token)
-    await client.get("/api/board", headers=headers)
+    board_data = (await client.get("/api/board", headers=headers)).json()
+    col_id = board_data["columns"][0]["id"]
 
     res = await client.patch(
-        "/api/board/columns/col-backlog",
+        f"/api/board/columns/{col_id}",
         json={"title": "Icebox"},
         headers=headers,
     )
@@ -217,7 +219,7 @@ async def test_rename_column(client):
 
     board_res = await client.get("/api/board", headers=headers)
     col = board_res.json()["columns"][0]
-    assert col["id"] == "col-backlog"
+    assert col["id"] == col_id
     assert col["title"] == "Icebox"
 
 

@@ -6,6 +6,7 @@ import type { Card } from "@/lib/kanban";
 import { ChecklistPanel } from "@/components/ChecklistPanel";
 import { CommentsPanel } from "@/components/CommentsPanel";
 import { DependenciesPanel } from "@/components/DependenciesPanel";
+import { TimeTrackingPanel } from "@/components/TimeTrackingPanel";
 
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
 const PRIORITY_STYLES: Record<string, { dot: string }> = {
@@ -293,6 +294,14 @@ export const CardDetailModal = ({
               Dependencies
             </div>
             <DependenciesPanel cardId={card.id} boardId={boardId} allCardTitles={allCardTitles} />
+          </div>
+
+          {/* Time Tracking */}
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--gray-text)] mb-2">
+              Time Logged
+            </div>
+            <TimeTrackingPanel cardId={card.id} boardId={boardId} />
           </div>
 
           {/* Comments */}

@@ -111,6 +111,17 @@ async def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_deps_card ON card_dependencies(card_id);
             CREATE INDEX IF NOT EXISTS idx_deps_on ON card_dependencies(depends_on_id);
+            CREATE TABLE IF NOT EXISTS time_entries (
+                id INTEGER PRIMARY KEY,
+                card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                hours REAL NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                date TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_time_entries_card ON time_entries(card_id);
+            CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id);
         """)
 
         # Migrations: add new columns if they don't exist
@@ -1240,6 +1251,85 @@ async def get_dashboard(user_id: int) -> dict:
             "total_overdue": len(overdue_cards),
             "total_due_soon": len(due_soon_cards),
         }
+    finally:
+        await db.close()
+
+
+async def add_time_entry(card_id: str, board_id: int, user_id: int, hours: float, description: str, date: str) -> dict | None:
+    """Add a time entry to a card. Returns the new entry or None if card not on board."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return None
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = await db.execute(
+            "INSERT INTO time_entries (card_id, user_id, hours, description, date, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (card_id, user_id, hours, description, date, now),
+        )
+        await db.commit()
+        return {"id": cursor.lastrowid, "card_id": card_id, "hours": hours, "description": description, "date": date, "created_at": now}
+    finally:
+        await db.close()
+
+
+async def get_time_entries(card_id: str, board_id: int) -> list[dict] | None:
+    """Return time entries for a card, or None if card not on board."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return None
+        rows = await db.execute_fetchall(
+            """SELECT te.id, u.username, te.hours, te.description, te.date, te.created_at
+               FROM time_entries te JOIN users u ON te.user_id = u.id
+               WHERE te.card_id = ? ORDER BY te.date DESC, te.created_at DESC""",
+            (card_id,),
+        )
+        return [{"id": r["id"], "username": r["username"], "hours": r["hours"],
+                 "description": r["description"], "date": r["date"], "created_at": r["created_at"]} for r in rows]
+    finally:
+        await db.close()
+
+
+async def delete_time_entry(entry_id: int, card_id: str, board_id: int, user_id: int) -> str:
+    """Delete a time entry. Returns 'ok', 'not_found', or 'forbidden'."""
+    db = await get_db()
+    try:
+        if not await _card_belongs_to_board(db, card_id, board_id):
+            return "not_found"
+        cursor = await db.execute(
+            "SELECT id, user_id FROM time_entries WHERE id = ? AND card_id = ?",
+            (entry_id, card_id),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return "not_found"
+        if row["user_id"] != user_id:
+            return "forbidden"
+        await db.execute("DELETE FROM time_entries WHERE id = ?", (entry_id,))
+        await db.commit()
+        return "ok"
+    finally:
+        await db.close()
+
+
+async def get_board_time_report(board_id: int) -> list[dict]:
+    """Return time summary grouped by card and user."""
+    db = await get_db()
+    try:
+        rows = await db.execute_fetchall(
+            """SELECT c.id as card_id, c.title as card_title,
+                      u.username, SUM(te.hours) as total_hours
+               FROM time_entries te
+               JOIN cards c ON te.card_id = c.id
+               JOIN columns col ON c.column_id = col.id
+               JOIN users u ON te.user_id = u.id
+               WHERE col.board_id = ?
+               GROUP BY c.id, u.id
+               ORDER BY total_hours DESC""",
+            (board_id,),
+        )
+        return [{"card_id": r["card_id"], "card_title": r["card_title"],
+                 "username": r["username"], "total_hours": r["total_hours"]} for r in rows]
     finally:
         await db.close()
 

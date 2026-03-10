@@ -29,6 +29,10 @@ vi.mock("@/lib/api", () => ({
     total_cards: 0, cards_by_column: {}, overdue_count: 0,
     cards_by_priority: {}, due_soon_count: 0, assigned_count: 0, unassigned_count: 0,
   }),
+  getTimeEntries: vi.fn().mockResolvedValue([]),
+  addTimeEntry: vi.fn().mockResolvedValue({ id: 1, username: "user", hours: 1, description: "", date: "2026-03-10", created_at: "" }),
+  deleteTimeEntry: vi.fn().mockResolvedValue(undefined),
+  getBoardTimeReport: vi.fn().mockResolvedValue([]),
 }));
 
 const renderBoard = () =>

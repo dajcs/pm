@@ -166,3 +166,25 @@ class CreateBoardFromTemplateRequest(BaseModel):
 
 class AddDependencyRequest(BaseModel):
     depends_on_id: str = Field(min_length=1, max_length=50)
+
+
+class TimeEntry(BaseModel):
+    id: int
+    username: str
+    hours: float
+    description: str
+    date: str
+    created_at: str
+
+
+class AddTimeEntryRequest(BaseModel):
+    hours: float = Field(gt=0, le=24)
+    description: str = Field(default="", max_length=500)
+    date: str = Field(min_length=1, max_length=10)
+
+
+class BoardTimeReportEntry(BaseModel):
+    card_id: str
+    card_title: str
+    username: str
+    total_hours: float

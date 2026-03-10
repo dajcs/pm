@@ -64,6 +64,10 @@ from database import (
     update_checklist_item,
     update_user_password,
     verify_password,
+    add_time_entry,
+    get_time_entries,
+    delete_time_entry,
+    get_board_time_report,
 )
 from models import (
     ActivityEntry,
@@ -78,6 +82,9 @@ from models import (
     ChatRequest,
     Comment,
     AddDependencyRequest,
+    AddTimeEntryRequest,
+    BoardTimeReportEntry,
+    TimeEntry,
     CreateBoardFromTemplateRequest,
     CreateBoardRequest,
     CreateCardRequest,
@@ -651,6 +658,64 @@ async def delete_comment_endpoint(
     if result == "forbidden":
         raise HTTPException(status_code=403, detail="Cannot delete another user's comment")
     return {"ok": True}
+
+
+# --- Time Tracking ---
+
+
+@app.get("/api/board/cards/{card_id}/time")
+async def get_time_entries_endpoint(card_id: str, board_id: int = Depends(get_board_id)):
+    entries = await get_time_entries(card_id, board_id)
+    if entries is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return entries
+
+
+@app.post("/api/board/cards/{card_id}/time", status_code=201)
+async def add_time_entry_endpoint(
+    card_id: str,
+    body: AddTimeEntryRequest,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    entry = await add_time_entry(card_id, board_id, user["id"], body.hours, body.description, body.date)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return {**entry, "username": username}
+
+
+@app.delete("/api/board/cards/{card_id}/time/{entry_id}")
+async def delete_time_entry_endpoint(
+    card_id: str,
+    entry_id: int,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    result = await delete_time_entry(entry_id, card_id, board_id, user["id"])
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Entry not found")
+    if result == "forbidden":
+        raise HTTPException(status_code=403, detail="Cannot delete another user's time entry")
+    return {"ok": True}
+
+
+@app.get("/api/boards/{bid}/time-report")
+async def board_time_report_endpoint(
+    bid: int, username: str = Depends(get_current_user)
+):
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    verified = await get_board_by_id(bid, user["id"])
+    if verified is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return await get_board_time_report(bid)
 
 
 # --- Columns ---

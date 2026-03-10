@@ -390,6 +390,49 @@ export interface ChatResponse {
   board_update: BoardData | null;
 }
 
+// --- Time Tracking ---
+
+export interface TimeEntry {
+  id: number;
+  username: string;
+  hours: number;
+  description: string;
+  date: string;
+  created_at: string;
+}
+
+export interface BoardTimeReportEntry {
+  card_id: string;
+  card_title: string;
+  username: string;
+  total_hours: number;
+}
+
+export async function getTimeEntries(cardId: string, boardId?: number): Promise<TimeEntry[]> {
+  return request<TimeEntry[]>(`/api/board/cards/${cardId}/time${boardParam(boardId)}`);
+}
+
+export async function addTimeEntry(
+  cardId: string,
+  hours: number,
+  description: string,
+  date: string,
+  boardId?: number
+): Promise<TimeEntry> {
+  return request<TimeEntry>(`/api/board/cards/${cardId}/time${boardParam(boardId)}`, {
+    method: "POST",
+    body: JSON.stringify({ hours, description, date }),
+  });
+}
+
+export async function deleteTimeEntry(cardId: string, entryId: number, boardId?: number): Promise<void> {
+  await request(`/api/board/cards/${cardId}/time/${entryId}${boardParam(boardId)}`, { method: "DELETE" });
+}
+
+export async function getBoardTimeReport(boardId: number): Promise<BoardTimeReportEntry[]> {
+  return request<BoardTimeReportEntry[]>(`/api/boards/${boardId}/time-report`);
+}
+
 export async function sendChatMessage(
   message: string,
   history: { role: string; content: string }[],

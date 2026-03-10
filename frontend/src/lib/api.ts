@@ -1,4 +1,4 @@
-import type { ActivityEntry, BoardData, ChecklistItem, Comment } from "./kanban";
+import type { ActivityEntry, ArchivedCard, BoardData, ChecklistItem, Comment } from "./kanban";
 
 export interface Board {
   id: number;
@@ -203,6 +203,20 @@ export async function deleteChecklistItem(
   await request(`/api/board/cards/${cardId}/checklist/${itemId}${boardParam(boardId)}`, {
     method: "DELETE",
   });
+}
+
+// --- Archive ---
+
+export async function archiveCard(cardId: string, boardId?: number): Promise<void> {
+  await request(`/api/board/cards/${cardId}/archive${boardParam(boardId)}`, { method: "POST" });
+}
+
+export async function restoreCard(cardId: string, boardId?: number): Promise<void> {
+  await request(`/api/board/cards/${cardId}/restore${boardParam(boardId)}`, { method: "POST" });
+}
+
+export async function listArchivedCards(boardId?: number): Promise<ArchivedCard[]> {
+  return request<ArchivedCard[]>(`/api/board/archived-cards${boardParam(boardId)}`);
 }
 
 // --- Comments ---

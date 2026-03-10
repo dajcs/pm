@@ -25,6 +25,8 @@ import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { BoardSelector } from "@/components/BoardSelector";
 import { AccountModal } from "@/components/AccountModal";
+import { ArchivePanel } from "@/components/ArchivePanel";
+import { ActivityFeed } from "@/components/ActivityFeed";
 import { moveCard, moveColumn, type BoardData, type Card } from "@/lib/kanban";
 import type { Board } from "@/lib/api";
 import * as api from "@/lib/api";
@@ -72,6 +74,8 @@ export const KanbanBoard = ({
   const [filterOverdue, setFilterOverdue] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAccount, setShowAccount] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const showError = useCallback((msg: string) => {
@@ -209,23 +213,35 @@ export const KanbanBoard = ({
       .catch((err) => showError(err.message));
   };
 
+  const removeCardFromState = (cardId: string) => {
+    setBoard((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        cards: Object.fromEntries(Object.entries(prev.cards).filter(([id]) => id !== cardId)),
+        columns: prev.columns.map((col) => ({
+          ...col,
+          cardIds: col.cardIds.filter((id) => id !== cardId),
+        })),
+      };
+    });
+  };
+
   const handleDeleteCard = (columnId: string, cardId: string) => {
     if (!board) return;
     const prev = board;
-
-    setBoard({
-      ...board,
-      cards: Object.fromEntries(
-        Object.entries(board.cards).filter(([id]) => id !== cardId)
-      ),
-      columns: board.columns.map((col) =>
-        col.id === columnId
-          ? { ...col, cardIds: col.cardIds.filter((id) => id !== cardId) }
-          : col
-      ),
-    });
-
+    removeCardFromState(cardId);
     api.deleteCard(cardId, boardId).catch((err) => {
+      setBoard(prev);
+      showError(err.message);
+    });
+  };
+
+  const handleArchiveCard = (columnId: string, cardId: string) => {
+    if (!board) return;
+    const prev = board;
+    removeCardFromState(cardId);
+    api.archiveCard(cardId, boardId).catch((err) => {
       setBoard(prev);
       showError(err.message);
     });
@@ -501,6 +517,24 @@ export const KanbanBoard = ({
               clear
             </button>
           )}
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() => setShowArchive(true)}
+              className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
+              title="View archived cards"
+            >
+              archive
+            </button>
+            {boardId && (
+              <button
+                onClick={() => setShowActivity(true)}
+                className="rounded-full border border-[var(--stroke)] px-3 py-0.5 text-xs text-[var(--gray-text)] hover:border-[var(--navy-dark)] transition-colors"
+                title="View board activity"
+              >
+                activity
+              </button>
+            )}
+          </div>
         </div>
 
         <DndContext
@@ -524,6 +558,7 @@ export const KanbanBoard = ({
                   onRename={handleRenameColumn}
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}
+                  onArchiveCard={handleArchiveCard}
                   onEditCard={handleEditCard}
                   boardId={boardId}
                   onDeleteColumn={handleDeleteColumn}
@@ -602,6 +637,16 @@ export const KanbanBoard = ({
       </main>
       {showAccount && username && (
         <AccountModal username={username} onClose={() => setShowAccount(false)} />
+      )}
+      {showArchive && (
+        <ArchivePanel
+          boardId={boardId}
+          onRestore={() => { /* board reloads on next fetch */ }}
+          onClose={() => setShowArchive(false)}
+        />
+      )}
+      {showActivity && boardId && (
+        <ActivityFeed boardId={boardId} onClose={() => setShowActivity(false)} />
       )}
     </div>
   );

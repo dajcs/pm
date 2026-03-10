@@ -127,3 +127,13 @@ class ActivityEntry(BaseModel):
     username: str
     action: str
     created_at: str
+
+
+class ArchivedCard(BaseModel):
+    id: str
+    title: str
+    details: str
+    due_date: str | None = None
+    priority: str = "none"
+    labels: list[str] = []
+    column_title: str

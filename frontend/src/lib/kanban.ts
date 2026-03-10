@@ -18,6 +18,16 @@ export type ActivityEntry = {
   created_at: string;
 };
 
+export type ArchivedCard = {
+  id: string;
+  title: string;
+  details: string;
+  due_date?: string | null;
+  priority: string;
+  labels: string[];
+  column_title: string;
+};
+
 export type Card = {
   id: string;
   title: string;

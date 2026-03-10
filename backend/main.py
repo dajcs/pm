@@ -20,6 +20,7 @@ from database import (
     add_checklist_item,
     add_column,
     add_comment,
+    archive_card,
     create_board,
     create_card,
     create_user,
@@ -36,10 +37,12 @@ from database import (
     get_or_create_board,
     get_user_by_username,
     init_db,
+    list_archived_cards,
     list_boards,
     load_board,
     rename_board,
     rename_column,
+    restore_card,
     save_board,
     set_column_wip_limit,
     update_board_description,
@@ -52,6 +55,7 @@ from models import (
     ActivityEntry,
     AddChecklistItemRequest,
     AddCommentRequest,
+    ArchivedCard,
     BoardData,
     BoardStatsResponse,
     ChangePasswordRequest,
@@ -308,8 +312,37 @@ async def delete_card_endpoint(
 ):
     if not await delete_card(card_id, board_id):
         raise HTTPException(status_code=404, detail="Card not found")
-    await add_activity(board_id, username, "deleted a card")
+    await add_activity(board_id, username, "permanently deleted a card")
     return {"ok": True}
+
+
+@app.post("/api/board/cards/{card_id}/archive")
+async def archive_card_endpoint(
+    card_id: str,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
+    if not await archive_card(card_id, board_id):
+        raise HTTPException(status_code=404, detail="Card not found")
+    await add_activity(board_id, username, "archived a card")
+    return {"ok": True}
+
+
+@app.post("/api/board/cards/{card_id}/restore")
+async def restore_card_endpoint(
+    card_id: str,
+    board_id: int = Depends(get_board_id),
+    username: str = Depends(get_current_user),
+):
+    if not await restore_card(card_id, board_id):
+        raise HTTPException(status_code=404, detail="Archived card not found")
+    await add_activity(board_id, username, "restored a card")
+    return {"ok": True}
+
+
+@app.get("/api/board/archived-cards")
+async def list_archived_cards_endpoint(board_id: int = Depends(get_board_id)):
+    return await list_archived_cards(board_id)
 
 
 @app.patch("/api/board/cards/{card_id}")

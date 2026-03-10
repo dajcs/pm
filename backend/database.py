@@ -102,6 +102,7 @@ async def init_db() -> None:
             "ALTER TABLE boards ADD COLUMN description TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE cards ADD COLUMN labels TEXT NOT NULL DEFAULT '[]'",
             "ALTER TABLE columns ADD COLUMN wip_limit INTEGER",
+            "ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
         ]:
             try:
                 await db.execute(migration_sql)
@@ -183,7 +184,7 @@ async def load_board(board_id: int) -> dict:
                       cards.due_date, cards.priority, cards.labels
                FROM cards
                JOIN columns ON cards.column_id = columns.id
-               WHERE columns.board_id = ?
+               WHERE columns.board_id = ? AND cards.archived = 0
                ORDER BY columns.position, cards.position""",
             (board_id,),
         )
@@ -319,6 +320,65 @@ async def delete_card(card_id: str, board_id: int) -> bool:
         )
         await db.commit()
         return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def archive_card(card_id: str, board_id: int) -> bool:
+    """Soft-delete a card. Returns True if archived, False if not found."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """UPDATE cards SET archived = 1
+               WHERE id = ? AND column_id IN (SELECT id FROM columns WHERE board_id = ?)
+               AND archived = 0""",
+            (card_id, board_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def restore_card(card_id: str, board_id: int) -> bool:
+    """Restore an archived card. Returns True if restored, False if not found."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """UPDATE cards SET archived = 0
+               WHERE id = ? AND column_id IN (SELECT id FROM columns WHERE board_id = ?)
+               AND archived = 1""",
+            (card_id, board_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def list_archived_cards(board_id: int) -> list[dict]:
+    """Return all archived cards for a board."""
+    db = await get_db()
+    try:
+        import json as _json
+        rows = await db.execute_fetchall(
+            """SELECT cards.id, cards.title, cards.details, cards.due_date,
+                      cards.priority, cards.labels, columns.title as column_title
+               FROM cards
+               JOIN columns ON cards.column_id = columns.id
+               WHERE columns.board_id = ? AND cards.archived = 1
+               ORDER BY columns.position, cards.position""",
+            (board_id,),
+        )
+        return [{
+            "id": r["id"],
+            "title": r["title"],
+            "details": r["details"],
+            "due_date": r["due_date"],
+            "priority": r["priority"] or "none",
+            "labels": _json.loads(r["labels"] or "[]"),
+            "column_title": r["column_title"],
+        } for r in rows]
     finally:
         await db.close()
 

@@ -9,6 +9,7 @@ vi.mock("@/lib/api", () => ({
   saveBoard: vi.fn(),
   createCard: vi.fn(),
   deleteCard: vi.fn(),
+  archiveCard: vi.fn(),
   updateCard: vi.fn(),
   renameColumn: vi.fn(),
   saveColumnsOrder: vi.fn(),
@@ -52,7 +53,7 @@ describe("KanbanBoard", () => {
       title: "New card",
       details: "Notes",
     });
-    vi.mocked(api.deleteCard).mockResolvedValueOnce(undefined);
+    vi.mocked(api.archiveCard).mockResolvedValueOnce(undefined);
 
     renderBoard();
     const column = getFirstColumn();
@@ -72,10 +73,10 @@ describe("KanbanBoard", () => {
       expect(within(column).getByText("New card")).toBeInTheDocument()
     );
 
-    const deleteButton = within(column).getByRole("button", {
-      name: /delete new card/i,
+    const archiveButton = within(column).getByRole("button", {
+      name: /archive new card/i,
     });
-    await userEvent.click(deleteButton);
+    await userEvent.click(archiveButton);
 
     expect(within(column).queryByText("New card")).not.toBeInTheDocument();
   });
@@ -122,16 +123,16 @@ describe("KanbanBoard", () => {
   });
 
   it("reverts card delete when API fails", async () => {
-    vi.mocked(api.deleteCard).mockRejectedValueOnce(new Error("Server error"));
+    vi.mocked(api.archiveCard).mockRejectedValueOnce(new Error("Server error"));
     renderBoard();
     const column = getFirstColumn();
 
     expect(within(column).getByText("Align roadmap themes")).toBeInTheDocument();
 
-    const deleteBtn = within(column).getByRole("button", {
-      name: /delete align roadmap themes/i,
+    const archiveBtn = within(column).getByRole("button", {
+      name: /archive align roadmap themes/i,
     });
-    await userEvent.click(deleteBtn);
+    await userEvent.click(archiveBtn);
 
     // Optimistic delete removes the card, API failure restores it
     await waitFor(() =>

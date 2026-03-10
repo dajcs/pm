@@ -14,6 +14,7 @@ type KanbanColumnProps = {
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
+  onArchiveCard?: (columnId: string, cardId: string) => void;
   onEditCard: (cardId: string, title: string, details: string) => void;
   onDeleteColumn?: (columnId: string) => void;
   onUpdatePriority?: (cardId: string, priority: string) => void;
@@ -40,6 +41,7 @@ export const KanbanColumn = ({
   onSetWipLimit,
   onChecklistCountChange,
   onCommentCountChange,
+  onArchiveCard,
 }: KanbanColumnProps) => {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [localTitle, setLocalTitle] = useState(column.title);
@@ -147,6 +149,7 @@ export const KanbanColumn = ({
               key={card.id}
               card={card}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
+              onArchive={onArchiveCard ? (cardId) => onArchiveCard(column.id, cardId) : undefined}
               onEdit={onEditCard}
               boardId={boardId}
               onUpdatePriority={onUpdatePriority}

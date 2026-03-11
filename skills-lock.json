@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-browser": {
+      "source": "toolshell/skills",
+      "sourceType": "github",
+      "computedHash": "d1bdf986fed3a66c94d03edb4142fb5a204fff558c9b3e7140eec417f3b7c8c3"
+    }
+  }
+}

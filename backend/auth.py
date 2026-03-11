@@ -7,9 +7,6 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "kanban-studio-dev-secret-key")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
-VALID_USERNAME = os.environ.get("APP_USERNAME", "user")
-VALID_PASSWORD = os.environ.get("APP_PASSWORD", "password")
-
 
 def create_token(username: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)

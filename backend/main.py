@@ -1,7 +1,9 @@
 import logging
 import os
+import re
 import sqlite3
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
@@ -14,7 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from ai import chat_with_board
-from auth import VALID_PASSWORD, VALID_USERNAME, create_token, verify_token
+from auth import create_token, verify_token
 from database import (
     add_activity,
     export_board,
@@ -44,7 +46,6 @@ from database import (
     get_user_by_username,
     init_db,
     invite_board_member,
-    is_board_owner,
     list_archived_cards,
     list_boards,
     list_shared_boards,
@@ -172,6 +173,22 @@ async def get_current_user(
     return username
 
 
+async def get_current_user_record(
+    username: str = Depends(get_current_user),
+) -> dict:
+    """Return the full user dict, raising 401 if not found."""
+    user = await get_user_by_username(username)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+async def _verify_board_access(bid: int, user: dict) -> None:
+    """Raise 404 if the user cannot access the board."""
+    if not await get_board_by_id(bid, user["id"]):
+        raise HTTPException(status_code=404, detail="Board not found")
+
+
 async def get_board_id(
     board_id: int | None = Query(default=None),
     username: str = Depends(get_current_user),
@@ -238,13 +255,9 @@ async def change_password_endpoint(
 
 
 @app.get("/api/boards")
-async def list_boards_endpoint(username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
+async def list_boards_endpoint(user: dict = Depends(get_current_user_record)):
     owned = await list_boards(user["id"])
     shared = await list_shared_boards(user["id"])
-    # Mark shared boards so frontend can distinguish
     for b in shared:
         b["shared"] = True
     for b in owned:
@@ -254,11 +267,8 @@ async def list_boards_endpoint(username: str = Depends(get_current_user)):
 
 @app.post("/api/boards", status_code=201)
 async def create_board_endpoint(
-    body: CreateBoardRequest, username: str = Depends(get_current_user)
+    body: CreateBoardRequest, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     board_id = await create_board(user["id"], body.name)
     return {"id": board_id, "name": body.name}
 
@@ -274,11 +284,8 @@ BOARD_TEMPLATES: dict[str, list[str]] = {
 
 @app.post("/api/boards/from-template", status_code=201)
 async def create_board_from_template_endpoint(
-    body: CreateBoardFromTemplateRequest, username: str = Depends(get_current_user)
+    body: CreateBoardFromTemplateRequest, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     template_cols = BOARD_TEMPLATES.get(body.template.lower())
     if template_cols is None:
         raise HTTPException(status_code=400, detail=f"Unknown template '{body.template}'. Available: {list(BOARD_TEMPLATES)}")
@@ -297,21 +304,15 @@ async def list_templates_endpoint():
 
 @app.patch("/api/boards/{bid}")
 async def rename_board_endpoint(
-    bid: int, body: RenameBoardRequest, username: str = Depends(get_current_user)
+    bid: int, body: RenameBoardRequest, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     if not await rename_board(bid, user["id"], body.name):
         raise HTTPException(status_code=404, detail="Board not found")
     return {"ok": True}
 
 
 @app.delete("/api/boards/{bid}")
-async def delete_board_endpoint(bid: int, username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
+async def delete_board_endpoint(bid: int, user: dict = Depends(get_current_user_record)):
     result = await delete_board(bid, user["id"])
     if result == "not_found":
         raise HTTPException(status_code=404, detail="Board not found")
@@ -321,38 +322,23 @@ async def delete_board_endpoint(bid: int, username: str = Depends(get_current_us
 
 
 @app.get("/api/boards/{bid}/stats")
-async def board_stats(bid: int, username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    verified = await get_board_by_id(bid, user["id"])
-    if verified is None:
-        raise HTTPException(status_code=404, detail="Board not found")
+async def board_stats(bid: int, user: dict = Depends(get_current_user_record)):
+    await _verify_board_access(bid, user)
     return await get_board_stats(bid)
 
 
 @app.get("/api/boards/{bid}/activity")
-async def board_activity(bid: int, username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    verified = await get_board_by_id(bid, user["id"])
-    if verified is None:
-        raise HTTPException(status_code=404, detail="Board not found")
+async def board_activity(bid: int, user: dict = Depends(get_current_user_record)):
+    await _verify_board_access(bid, user)
     return await get_activity(bid)
 
 
 @app.post("/api/boards/{bid}/activity")
 async def log_board_activity(
-    bid: int, body: LogActivityRequest, username: str = Depends(get_current_user)
+    bid: int, body: LogActivityRequest, user: dict = Depends(get_current_user_record),
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    verified = await get_board_by_id(bid, user["id"])
-    if verified is None:
-        raise HTTPException(status_code=404, detail="Board not found")
-    await add_activity(bid, username, body.action)
+    await _verify_board_access(bid, user)
+    await add_activity(bid, user["username"], body.action)
     return {"ok": True}
 
 
@@ -365,34 +351,21 @@ async def search_cards_endpoint(
 
 
 @app.get("/api/boards/{bid}/members")
-async def board_members_endpoint(bid: int, username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    verified = await get_board_by_id(bid, user["id"])
-    if verified is None:
-        raise HTTPException(status_code=404, detail="Board not found")
+async def board_members_endpoint(bid: int, user: dict = Depends(get_current_user_record)):
+    await _verify_board_access(bid, user)
     return await list_board_members(bid)
 
 
 @app.get("/api/boards/{bid}/members/roles")
-async def board_members_with_roles_endpoint(bid: int, username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    verified = await get_board_by_id(bid, user["id"])
-    if verified is None:
-        raise HTTPException(status_code=404, detail="Board not found")
+async def board_members_with_roles_endpoint(bid: int, user: dict = Depends(get_current_user_record)):
+    await _verify_board_access(bid, user)
     return await get_board_members_with_roles(bid)
 
 
 @app.post("/api/boards/{bid}/invite")
 async def invite_member_endpoint(
-    bid: int, body: InviteMemberRequest, username: str = Depends(get_current_user)
+    bid: int, body: InviteMemberRequest, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     result = await invite_board_member(bid, user["id"], body.username)
     if result == "not_owner":
         raise HTTPException(status_code=403, detail="Only the board owner can invite members")
@@ -400,42 +373,31 @@ async def invite_member_endpoint(
         raise HTTPException(status_code=404, detail=f"User '{body.username}' not found")
     if result == "already_member":
         raise HTTPException(status_code=409, detail="User is already a member")
-    await add_activity(bid, username, f"invited {body.username} to the board")
+    await add_activity(bid, user["username"], f"invited {body.username} to the board")
     return {"ok": True}
 
 
 @app.delete("/api/boards/{bid}/members/{member_username}")
 async def remove_member_endpoint(
-    bid: int, member_username: str, username: str = Depends(get_current_user)
+    bid: int, member_username: str, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     removed = await remove_board_member(bid, user["id"], member_username)
     if not removed:
         raise HTTPException(status_code=403, detail="Not authorized or member not found")
-    await add_activity(bid, username, f"removed {member_username} from the board")
+    await add_activity(bid, user["username"], f"removed {member_username} from the board")
     return {"ok": True}
 
 
 @app.get("/api/boards/{bid}/export")
-async def export_board_endpoint(bid: int, username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    verified = await get_board_by_id(bid, user["id"])
-    if verified is None:
-        raise HTTPException(status_code=404, detail="Board not found")
+async def export_board_endpoint(bid: int, user: dict = Depends(get_current_user_record)):
+    await _verify_board_access(bid, user)
     return await export_board(bid)
 
 
 @app.patch("/api/boards/{bid}/description")
 async def update_board_description_endpoint(
-    bid: int, body: UpdateBoardDescriptionRequest, username: str = Depends(get_current_user)
+    bid: int, body: UpdateBoardDescriptionRequest, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     if not await update_board_description(bid, user["id"], body.description):
         raise HTTPException(status_code=404, detail="Board not found")
     return {"ok": True}
@@ -536,10 +498,7 @@ async def remove_card_dep_endpoint(
 
 
 @app.get("/api/dashboard")
-async def dashboard_endpoint(username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
+async def dashboard_endpoint(user: dict = Depends(get_current_user_record)):
     return await get_dashboard(user["id"])
 
 
@@ -671,8 +630,7 @@ async def add_comment_endpoint(
     if comment_id is None:
         raise HTTPException(status_code=404, detail="Card not found")
     # Notify mentioned users (@username pattern)
-    import re as _re
-    mentions = set(_re.findall(r"@(\w+)", body.text))
+    mentions = set(re.findall(r"@(\w+)", body.text))
     for mentioned in mentions:
         if mentioned != username:
             mentioned_user = await get_user_by_username(mentioned)
@@ -682,7 +640,6 @@ async def add_comment_endpoint(
                     f"{username} mentioned you in a comment",
                     board_id, card_id,
                 )
-    from datetime import datetime, timezone
     return {"id": comment_id, "username": username, "text": body.text, "created_at": datetime.now(timezone.utc).isoformat()}
 
 
@@ -717,15 +674,12 @@ async def add_time_entry_endpoint(
     card_id: str,
     body: AddTimeEntryRequest,
     board_id: int = Depends(get_board_id),
-    username: str = Depends(get_current_user),
+    user: dict = Depends(get_current_user_record),
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     entry = await add_time_entry(card_id, board_id, user["id"], body.hours, body.description, body.date)
     if entry is None:
         raise HTTPException(status_code=404, detail="Card not found")
-    return {**entry, "username": username}
+    return {**entry, "username": user["username"]}
 
 
 @app.delete("/api/board/cards/{card_id}/time/{entry_id}")
@@ -733,11 +687,8 @@ async def delete_time_entry_endpoint(
     card_id: str,
     entry_id: int,
     board_id: int = Depends(get_board_id),
-    username: str = Depends(get_current_user),
+    user: dict = Depends(get_current_user_record),
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     result = await delete_time_entry(entry_id, card_id, board_id, user["id"])
     if result == "not_found":
         raise HTTPException(status_code=404, detail="Entry not found")
@@ -747,15 +698,8 @@ async def delete_time_entry_endpoint(
 
 
 @app.get("/api/boards/{bid}/time-report")
-async def board_time_report_endpoint(
-    bid: int, username: str = Depends(get_current_user)
-):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    verified = await get_board_by_id(bid, user["id"])
-    if verified is None:
-        raise HTTPException(status_code=404, detail="Board not found")
+async def board_time_report_endpoint(bid: int, user: dict = Depends(get_current_user_record)):
+    await _verify_board_access(bid, user)
     return await get_board_time_report(bid)
 
 
@@ -763,36 +707,24 @@ async def board_time_report_endpoint(
 
 
 @app.get("/api/boards/{bid}/sprints")
-async def list_sprints_endpoint(bid: int, username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    if not await get_board_by_id(bid, user["id"]):
-        raise HTTPException(status_code=404, detail="Board not found")
+async def list_sprints_endpoint(bid: int, user: dict = Depends(get_current_user_record)):
+    await _verify_board_access(bid, user)
     return await list_sprints(bid)
 
 
 @app.post("/api/boards/{bid}/sprints", status_code=201)
 async def create_sprint_endpoint(
-    bid: int, body: CreateSprintRequest, username: str = Depends(get_current_user)
+    bid: int, body: CreateSprintRequest, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    if not await get_board_by_id(bid, user["id"]):
-        raise HTTPException(status_code=404, detail="Board not found")
+    await _verify_board_access(bid, user)
     sprint = await create_sprint(bid, body.name, body.goal, body.start_date, body.end_date)
-    await add_activity(bid, username, f"created sprint \"{body.name}\"")
+    await add_activity(bid, user["username"], f"created sprint \"{body.name}\"")
     return sprint
 
 
 @app.get("/api/boards/{bid}/sprints/{sid}")
-async def get_sprint_endpoint(bid: int, sid: int, username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    if not await get_board_by_id(bid, user["id"]):
-        raise HTTPException(status_code=404, detail="Board not found")
+async def get_sprint_endpoint(bid: int, sid: int, user: dict = Depends(get_current_user_record)):
+    await _verify_board_access(bid, user)
     sprint = await get_sprint(sid, bid)
     if sprint is None:
         raise HTTPException(status_code=404, detail="Sprint not found")
@@ -801,13 +733,9 @@ async def get_sprint_endpoint(bid: int, sid: int, username: str = Depends(get_cu
 
 @app.patch("/api/boards/{bid}/sprints/{sid}")
 async def update_sprint_endpoint(
-    bid: int, sid: int, body: UpdateSprintRequest, username: str = Depends(get_current_user)
+    bid: int, sid: int, body: UpdateSprintRequest, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    if not await get_board_by_id(bid, user["id"]):
-        raise HTTPException(status_code=404, detail="Board not found")
+    await _verify_board_access(bid, user)
     fields = body.model_dump(exclude_unset=True)
     if not await update_sprint(sid, bid, fields):
         raise HTTPException(status_code=404, detail="Sprint not found")
@@ -816,16 +744,12 @@ async def update_sprint_endpoint(
 
 @app.delete("/api/boards/{bid}/sprints/{sid}")
 async def delete_sprint_endpoint(
-    bid: int, sid: int, username: str = Depends(get_current_user)
+    bid: int, sid: int, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    if not await get_board_by_id(bid, user["id"]):
-        raise HTTPException(status_code=404, detail="Board not found")
+    await _verify_board_access(bid, user)
     if not await delete_sprint(sid, bid):
         raise HTTPException(status_code=404, detail="Sprint not found")
-    await add_activity(bid, username, "deleted a sprint")
+    await add_activity(bid, user["username"], "deleted a sprint")
     return {"ok": True}
 
 
@@ -864,38 +788,26 @@ async def remove_card_sprint_endpoint(
 @app.get("/api/notifications")
 async def get_notifications_endpoint(
     unread_only: bool = False,
-    username: str = Depends(get_current_user),
+    user: dict = Depends(get_current_user_record),
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     return await get_notifications(user["id"], unread_only)
 
 
 @app.get("/api/notifications/count")
-async def get_unread_count_endpoint(username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
+async def get_unread_count_endpoint(user: dict = Depends(get_current_user_record)):
     return {"unread": await get_unread_count(user["id"])}
 
 
 @app.post("/api/notifications/read")
-async def mark_read_endpoint(body: MarkReadRequest, username: str = Depends(get_current_user)):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
+async def mark_read_endpoint(body: MarkReadRequest, user: dict = Depends(get_current_user_record)):
     count = await mark_notifications_read(user["id"], body.ids)
     return {"marked": count}
 
 
 @app.delete("/api/notifications/{notification_id}")
 async def delete_notification_endpoint(
-    notification_id: int, username: str = Depends(get_current_user)
+    notification_id: int, user: dict = Depends(get_current_user_record)
 ):
-    user = await get_user_by_username(username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     if not await delete_notification(user["id"], notification_id):
         raise HTTPException(status_code=404, detail="Notification not found")
     return {"ok": True}

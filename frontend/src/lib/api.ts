@@ -135,12 +135,7 @@ export async function deleteColumn(columnId: string, boardId?: number): Promise<
   await request(`/api/board/columns/${columnId}${boardParam(boardId)}`, { method: "DELETE" });
 }
 
-export async function saveColumnsOrder(data: BoardData, boardId?: number): Promise<BoardData> {
-  return request<BoardData>(`/api/board${boardParam(boardId)}`, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-}
+export const saveColumnsOrder = saveBoard;
 
 // --- Boards ---
 

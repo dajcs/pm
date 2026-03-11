@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import aiosqlite
@@ -233,7 +233,6 @@ async def load_board(board_id: int) -> dict:
     """Load full board data as {columns: [...], cards: {...}} in two queries."""
     db = await get_db()
     try:
-        import json as _json
         cols = await db.execute_fetchall(
             "SELECT id, title, wip_limit FROM columns WHERE board_id = ? ORDER BY position",
             (board_id,),
@@ -286,7 +285,7 @@ async def load_board(board_id: int) -> dict:
                 "details": card["details"],
                 "due_date": card["due_date"],
                 "priority": card["priority"] or "none",
-                "labels": _json.loads(card["labels"] or "[]"),
+                "labels": json.loads(card["labels"] or "[]"),
                 "checklist_total": summary["total"],
                 "checklist_done": summary["done"],
                 "comment_count": comment_counts.get(card_id, 0),
@@ -312,7 +311,6 @@ async def save_board(board_id: int, data: dict) -> None:
     """Replace the entire board content (columns + cards) with the provided data."""
     db = await get_db()
     try:
-        import json as _json
         await db.execute("DELETE FROM columns WHERE board_id = ?", (board_id,))
         for position, col in enumerate(data["columns"]):
             await db.execute(
@@ -330,7 +328,7 @@ async def save_board(board_id: int, data: dict) -> None:
                             card_pos,
                             card.get("due_date"),
                             card.get("priority", "none"),
-                            _json.dumps(card.get("labels", [])),
+                            json.dumps(card.get("labels", [])),
                             card.get("assigned_to"),
                         ),
                     )
@@ -358,7 +356,6 @@ async def create_card(board_id: int, column_id: str, title: str, details: str, d
         )
         row = await cursor.fetchone()
         position = row["next_pos"]
-        import json as _json
         card_id = f"card-{uuid.uuid4().hex[:8]}"
         await db.execute(
             "INSERT INTO cards (id, column_id, title, details, position, due_date, priority, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -372,7 +369,6 @@ async def create_card(board_id: int, column_id: str, title: str, details: str, d
 
 async def duplicate_card(card_id: str, board_id: int) -> dict | None:
     """Duplicate a card in the same column. Returns new card data or None if not found."""
-    import json as _json
     db = await get_db()
     try:
         row = await db.execute_fetchall(
@@ -403,7 +399,7 @@ async def duplicate_card(card_id: str, board_id: int) -> dict | None:
             "details": src["details"],
             "due_date": src["due_date"],
             "priority": src["priority"],
-            "labels": _json.loads(src["labels"] or "[]"),
+            "labels": json.loads(src["labels"] or "[]"),
             "column_id": src["column_id"],
         }
     finally:
@@ -461,7 +457,6 @@ async def list_archived_cards(board_id: int) -> list[dict]:
     """Return all archived cards for a board."""
     db = await get_db()
     try:
-        import json as _json
         rows = await db.execute_fetchall(
             """SELECT cards.id, cards.title, cards.details, cards.due_date,
                       cards.priority, cards.labels, columns.title as column_title
@@ -477,7 +472,7 @@ async def list_archived_cards(board_id: int) -> list[dict]:
             "details": r["details"],
             "due_date": r["due_date"],
             "priority": r["priority"] or "none",
-            "labels": _json.loads(r["labels"] or "[]"),
+            "labels": json.loads(r["labels"] or "[]"),
             "column_title": r["column_title"],
         } for r in rows]
     finally:
@@ -496,23 +491,15 @@ async def update_card(card_id: str, board_id: int, updates: dict) -> bool:
         )
         if not await cursor.fetchone():
             return False
-        import json as _json
-        import json as _json
-        field_map = {
-            "title": "title",
-            "details": "details",
-            "due_date": "due_date",
-            "priority": "priority",
-            "assigned_to": "assigned_to",
-        }
+        simple_fields = ("title", "details", "due_date", "priority", "assigned_to")
         fields, values = [], []
-        for key, col in field_map.items():
+        for key in simple_fields:
             if key in updates:
-                fields.append(f"{col} = ?")
+                fields.append(f"{key} = ?")
                 values.append(updates[key])
         if "labels" in updates:
             fields.append("labels = ?")
-            values.append(_json.dumps(updates["labels"] or []))
+            values.append(json.dumps(updates["labels"] or []))
         if not fields:
             return True  # card found, nothing to update
         values.append(card_id)
@@ -794,7 +781,6 @@ async def delete_column(column_id: str, board_id: int) -> bool:
 
 async def get_board_stats(board_id: int) -> dict:
     """Return comprehensive board stats including priority, assignment, and due-date breakdown."""
-    from datetime import date, timedelta
     db = await get_db()
     try:
         cols = await db.execute_fetchall(
@@ -1116,7 +1102,6 @@ async def export_board(board_id: int) -> dict:
     """Return full board data including archived cards, columns, and metadata."""
     db = await get_db()
     try:
-        import json as _json
         board_row = await db.execute_fetchall(
             "SELECT id, name, description, created_at FROM boards WHERE id = ?", (board_id,)
         )
@@ -1142,7 +1127,7 @@ async def export_board(board_id: int) -> dict:
                 "details": card["details"],
                 "due_date": card["due_date"],
                 "priority": card["priority"] or "none",
-                "labels": _json.loads(card["labels"] or "[]"),
+                "labels": json.loads(card["labels"] or "[]"),
                 "archived": bool(card["archived"]),
             })
         return {
@@ -1231,7 +1216,6 @@ async def get_card_dependencies(card_id: str, board_id: int) -> dict:
 
 async def get_dashboard(user_id: int) -> dict:
     """Return overdue and due-soon cards across all boards the user has access to."""
-    from datetime import date, timedelta
     db = await get_db()
     try:
         today = date.today().isoformat()

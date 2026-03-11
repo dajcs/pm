@@ -3,29 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import type { Card } from "@/lib/kanban";
+import { PRIORITIES, LABEL_OPTIONS, LABEL_COLORS, PRIORITY_STYLES } from "@/lib/constants";
 import { ChecklistPanel } from "@/components/ChecklistPanel";
 import { CommentsPanel } from "@/components/CommentsPanel";
 import { DependenciesPanel } from "@/components/DependenciesPanel";
 import { TimeTrackingPanel } from "@/components/TimeTrackingPanel";
 import { CardSprintPanel } from "@/components/CardSprintPanel";
-
-const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
-const PRIORITY_STYLES: Record<string, { dot: string }> = {
-  none:   { dot: "bg-[var(--gray-text)]" },
-  low:    { dot: "bg-[var(--primary-blue)]" },
-  medium: { dot: "bg-[var(--accent-yellow)]" },
-  high:   { dot: "bg-orange-500" },
-  urgent: { dot: "bg-red-500" },
-};
-const LABEL_OPTIONS = ["bug", "feature", "improvement", "docs", "testing", "blocked"];
-const LABEL_COLORS: Record<string, string> = {
-  bug: "bg-red-100 text-red-700 border-red-200",
-  feature: "bg-blue-100 text-blue-700 border-blue-200",
-  improvement: "bg-purple-100 text-purple-700 border-purple-200",
-  docs: "bg-gray-100 text-gray-700 border-gray-200",
-  testing: "bg-green-100 text-green-700 border-green-200",
-  blocked: "bg-orange-100 text-orange-700 border-orange-200",
-};
 
 type CardDetailModalProps = {
   card: Card;
